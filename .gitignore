@@ -1,0 +1,28 @@
+# Binaries
+chipfs
+/dist/
+
+# Go build cache and test artifacts
+*.test
+*.out
+coverage.html
+
+# Go module download cache (not vendor)
+/vendor/
+
+# macOS
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# FUSE mount leftovers (if mount point is inside repo)
+/mnt/
+
+# Compiled CGO objects
+*.a
+*.so
+*.dylib
