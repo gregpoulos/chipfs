@@ -1,6 +1,7 @@
 package nsf_test
 
 import (
+	"os"
 	"testing"
 
 	"github.com/gregpoulos/chipfs/internal/formats/nsf"
@@ -84,4 +85,20 @@ func TestParse_NullPaddedStringsAreTrimmed(t *testing.T) {
 	h, err := nsf.Parse(data)
 	require.NoError(t, err)
 	assert.Equal(t, "Short Title", h.Title, "trailing null bytes should not appear in result")
+}
+
+// TestParse_SMB tests against a real NSF file (Super Mario Bros.) to catch
+// assumptions that synthetic fixtures might not exercise.
+func TestParse_SMB(t *testing.T) {
+	data, err := os.ReadFile("../../../testdata/fixtures/smb.nsf")
+	require.NoError(t, err, "testdata/fixtures/smb.nsf must exist; copy it there to run this test")
+
+	h, err := nsf.Parse(data)
+	require.NoError(t, err)
+
+	assert.Equal(t, 18, h.TrackCount)
+	assert.Equal(t, 1, h.FirstTrack)
+	assert.Equal(t, "Super Mario Bros.", h.Title)
+	assert.Equal(t, "Koji Kondo", h.Artist)
+	assert.Equal(t, "1985 Nintendo", h.Copyright)
 }
