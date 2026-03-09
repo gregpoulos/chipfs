@@ -39,6 +39,10 @@ binary fixtures, and all subsequent packages depend on the metadata they produce
 - [ ] `internal/vfs` — `Root`: scan source dir, expose real files + virtual siblings
 - [ ] `internal/vfs` — `ChipDir`: `Readdir` (synthesize track filenames), `Lookup`
 - [ ] `internal/vfs` — `TrackFile`: `Getattr` (report `EstimatedSize`), `Read` (serve from cache)
+- [ ] `internal/vfs` — `TrackFile.Read`: serve WAV header + ID3 chunk without emulation;
+      only start the emulator if the read offset reaches the `data` chunk. This prevents
+      Navidrome's metadata scanner from triggering full track renders for 50+ files
+      simultaneously, which would spike RAM by hundreds of MB on a cold library scan.
 - [ ] `cmd/chipfs` — Wire everything together: parse flags, call `fuse.Mount`
 
 ## Phase 6: Integration & Hardening
