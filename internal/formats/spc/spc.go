@@ -9,6 +9,7 @@ package spc
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"strconv"
@@ -41,15 +42,45 @@ func Parse(data []byte) (*Header, error) {
 		return nil, fmt.Errorf("spc: file truncated: need %d bytes for ID666 tags, got %d", 0xD2, len(data))
 	}
 
-	return &Header{
-		SongTitle:      nullPaddedString(data[0x2E:0x4E]),
-		GameTitle:      nullPaddedString(data[0x4E:0x6E]),
-		Dumper:         nullPaddedString(data[0x6E:0x7E]),
-		Comments:       nullPaddedString(data[0x7E:0x9E]),
-		Artist:         nullPaddedString(data[0xB1:0xD1]),
-		PlayDurationMs: parseASCIIInt(data[0xA9:0xAC]) * 1000,
-		FadeDurationMs: parseASCIIInt(data[0xAC:0xB1]),
-	}, nil
+	h := &Header{
+		SongTitle: nullPaddedString(data[0x2E:0x4E]),
+		GameTitle: nullPaddedString(data[0x4E:0x6E]),
+		Dumper:    nullPaddedString(data[0x6E:0x7E]),
+		Comments:  nullPaddedString(data[0x7E:0x9E]),
+	}
+
+	if isBinaryFormat(data) {
+		// Binary format: durations are raw little-endian integers; artist is at 0xB0.
+		playSec := uint32(data[0xA9]) | uint32(data[0xAA])<<8 | uint32(data[0xAB])<<16
+		h.PlayDurationMs = int(playSec) * 1000
+		h.FadeDurationMs = int(binary.LittleEndian.Uint32(data[0xAC:0xB0]))
+		h.Artist = nullPaddedString(data[0xB0:0xD0])
+	} else {
+		// Text format: durations are ASCII decimal strings; artist is at 0xB1.
+		h.PlayDurationMs = parseASCIIInt(data[0xA9:0xAC]) * 1000
+		h.FadeDurationMs = parseASCIIInt(data[0xAC:0xB1])
+		h.Artist = nullPaddedString(data[0xB1:0xD1])
+	}
+
+	return h, nil
+}
+
+// isBinaryFormat detects whether the ID666 tag uses binary or text encoding.
+//
+// The spec provides no definitive indicator. Two heuristics are applied in order:
+//  1. If data[0xA0] == '/', the date field is "MM/DD/YYYY" → text format.
+//  2. If data[0xA9] is an ASCII digit (0x30–0x39), infer text format.
+//
+// Edge case: binary files with 48–57 second durations will false-positive on
+// heuristic 2. This is an accepted limitation of the spec.
+func isBinaryFormat(data []byte) bool {
+	if data[0xA0] == '/' {
+		return false // date slash confirms text format
+	}
+	if data[0xA9] >= 0x30 && data[0xA9] <= 0x39 {
+		return false // ASCII digit at duration field → text format
+	}
+	return true
 }
 
 // nullPaddedString converts a fixed-length null-padded byte slice to a string,

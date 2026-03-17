@@ -11,7 +11,7 @@ binary fixtures, and all subsequent packages depend on the metadata they produce
 - [x] `internal/formats/nsf` — NSF header parser (magic, track count, global metadata)
 - [x] `internal/formats/nsf` — NSFe extension chunk parser (tlbl, time, fade, auth)
 - [x] `internal/formats/gbs` — GBS header parser
-- [x] `internal/formats/spc` — SPC ID666 tag parser (text format)
+- [x] `internal/formats/spc` — SPC ID666 tag parser (text and binary format)
 
 ## Phase 2: WAV Muxer
 
@@ -54,12 +54,6 @@ binary fixtures, and all subsequent packages depend on the metadata they produce
 - [ ] Mount option: `-o fade_length=8`
 - [ ] Mount option: `-o cache_size_mb=256`
 - [ ] RSN support (RAR containing multiple SPCs) — optional, via libarchive
-- [ ] SPC binary-format ID666 tag parsing — the ID666 tag has two variants (text
-      and binary), distinguished by the date field layout at 0x9E (not byte 0x23
-      as commonly assumed). Binary format shifts the artist field from 0xB1 to 0xB0
-      and shrinks the fade field from 5 bytes to 4 bytes; durations remain ASCII in
-      both. Detection is heuristic (check for '/' in the ASCII date field), which is
-      unreliable when the date is zeroed. Currently we always parse as text format.
 
 ## Deferred / Out of Scope for v1
 
