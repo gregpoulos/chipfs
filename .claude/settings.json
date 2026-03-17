@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go test:*)",
+      "Bash(git -C /Users/gap/workspace/chipfs add internal/formats/nsf/nsf.go)",
+      "Bash(git -C:*)"
+    ]
+  }
+}
