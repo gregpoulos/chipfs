@@ -20,13 +20,13 @@ binary fixtures, and all subsequent packages depend on the metadata they produce
 - [x] `internal/wav` — Embed ID3v2 as RIFF `id3 ` chunk
 - [x] `internal/wav` — `EstimatedSize` must exactly match `Encode` output
 
-## Phase 3: Track Cache (current)
+## Phase 3: Track Cache ✓
 
-- [ ] `internal/cache` — LRU eviction using `container/list` + `map`
-- [ ] `internal/cache` — Thread-safe Get/Set
-- [ ] `internal/cache` — Byte-accurate capacity tracking
+- [x] `internal/cache` — LRU eviction using `container/list` + `map`
+- [x] `internal/cache` — Thread-safe Get/Set
+- [x] `internal/cache` — Byte-accurate capacity tracking
 
-## Phase 4: libgme CGO Wrapper
+## Phase 4: libgme CGO Wrapper (current)
 
 - [ ] `internal/gme` — CGO import block with correct Homebrew/apt flags
 - [ ] `internal/gme` — `Open` via `gme_open_data`
