@@ -7,12 +7,18 @@
 // estimation.
 package spc
 
-import "errors"
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"strconv"
+	"strings"
+)
 
 // ErrInvalidMagic is returned when the data does not begin with the SPC magic string.
 var ErrInvalidMagic = errors.New("not a valid SPC file: invalid magic bytes")
 
-// spcMagic is the 33-byte ASCII string at the start of every valid SPC file.
+// spcMagic is the 33-byte ASCII string that begins every valid SPC file.
 const spcMagic = "SNES-SPC700 Sound File Data v0.30"
 
 // Header contains the parsed ID666 tag metadata from an SPC file.
@@ -22,19 +28,49 @@ type Header struct {
 	Artist         string
 	Dumper         string
 	Comments       string
-	PlayDurationMs int // converted from the ID666 play_time field (stored as seconds)
-	FadeDurationMs int // converted from the ID666 fade_length field (stored as milliseconds)
+	PlayDurationMs int // converted from ID666 play_time (stored as integer seconds)
+	FadeDurationMs int // converted from ID666 fade_length (stored as integer milliseconds)
 }
 
 // Parse parses an SPC file from raw bytes and returns its ID666 tag metadata.
 func Parse(data []byte) (*Header, error) {
-	// TODO: implement
-	// 1. Verify 33-byte magic at [0:33]
-	// 2. Check ID666 tag present flag at [0x23]
-	// 3. Read text-format ID666 fields at fixed offsets
-	//    song [0x2E:0x4E], game [0x4E:0x6E], dumper [0x6E:0x7E]
-	//    comments [0x7E:0x9E], artist [0xB1:0xD1]
-	// 4. Parse play duration (ASCII decimal seconds) at [0xA9:0xAC], multiply by 1000
-	// 5. Parse fade length (ASCII decimal ms) at [0xAC:0xB1]
-	return nil, errors.New("not implemented")
+	if len(data) < 33 || !bytes.Equal(data[0:33], []byte(spcMagic)) {
+		return nil, ErrInvalidMagic
+	}
+	if len(data) < 0xD2 {
+		return nil, fmt.Errorf("spc: file truncated: need %d bytes for ID666 tags, got %d", 0xD2, len(data))
+	}
+
+	return &Header{
+		SongTitle:      nullPaddedString(data[0x2E:0x4E]),
+		GameTitle:      nullPaddedString(data[0x4E:0x6E]),
+		Dumper:         nullPaddedString(data[0x6E:0x7E]),
+		Comments:       nullPaddedString(data[0x7E:0x9E]),
+		Artist:         nullPaddedString(data[0xB1:0xD1]),
+		PlayDurationMs: parseASCIIInt(data[0xA9:0xAC]) * 1000,
+		FadeDurationMs: parseASCIIInt(data[0xAC:0xB1]),
+	}, nil
+}
+
+// nullPaddedString converts a fixed-length null-padded byte slice to a string,
+// trimming everything from the first null byte onward.
+func nullPaddedString(b []byte) string {
+	if i := bytes.IndexByte(b, 0); i >= 0 {
+		return string(b[:i])
+	}
+	return string(b)
+}
+
+// parseASCIIInt parses a decimal integer from a fixed-width ASCII byte slice,
+// ignoring leading/trailing spaces. Returns 0 if the field is blank or unparseable.
+func parseASCIIInt(b []byte) int {
+	s := strings.TrimSpace(string(b))
+	if s == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0
+	}
+	return n
 }

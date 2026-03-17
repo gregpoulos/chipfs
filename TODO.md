@@ -8,7 +8,7 @@ The format parsers are the natural starting point: they are pure Go (no CGO, no
 FUSE), their correctness is fully verifiable with unit tests against synthesized
 binary fixtures, and all subsequent packages depend on the metadata they produce.
 
-- [ ] `internal/formats/nsf` — NSF header parser (magic, track count, global metadata)
+- [x] `internal/formats/nsf` — NSF header parser (magic, track count, global metadata)
 - [ ] `internal/formats/nsf` — NSFe extension chunk parser (tlbl, time, fade, auth)
 - [ ] `internal/formats/gbs` — GBS header parser
 - [ ] `internal/formats/spc` — SPC ID666 tag parser (text format)
