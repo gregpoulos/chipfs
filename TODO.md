@@ -2,7 +2,7 @@
 
 This file tracks the current state of implementation. Update it as phases complete.
 
-## Phase 1: Format Parsers (current)
+## Phase 1: Format Parsers ✓
 
 The format parsers are the natural starting point: they are pure Go (no CGO, no
 FUSE), their correctness is fully verifiable with unit tests against synthesized
@@ -13,7 +13,7 @@ binary fixtures, and all subsequent packages depend on the metadata they produce
 - [x] `internal/formats/gbs` — GBS header parser
 - [x] `internal/formats/spc` — SPC ID666 tag parser (text and binary format)
 
-## Phase 2: WAV Muxer
+## Phase 2: WAV Muxer (current)
 
 - [ ] `internal/wav` — RIFF WAV header construction
 - [ ] `internal/wav` — ID3v2 tag building (TIT2, TPE1, TALB, TRCK, TDRC frames)
