@@ -6,12 +6,16 @@
 // count; per-track titles and durations are only available in the NSFe extension.
 package nsf
 
-import "errors"
+import (
+	"bytes"
+	"errors"
+	"fmt"
+)
 
 // ErrInvalidMagic is returned when the data does not begin with the NSF or NSFe magic bytes.
 var ErrInvalidMagic = errors.New("not a valid NSF file: invalid magic bytes")
 
-// NSF magic: "NESM" + 0x1A
+// magic is the five-byte sequence that begins every NSF file: "NESM" + 0x1A.
 var magic = []byte{0x4E, 0x45, 0x53, 0x4D, 0x1A}
 
 // Header contains the parsed metadata from an NSF or NSFe file.
@@ -20,7 +24,7 @@ type Header struct {
 	Artist     string
 	Copyright  string
 	TrackCount int
-	FirstTrack int    // 1-indexed default starting track
+	FirstTrack int     // 1-indexed default starting track
 	Tracks     []TrackInfo // populated only for NSFe files; nil for plain NSF
 }
 
@@ -33,12 +37,31 @@ type TrackInfo struct {
 }
 
 // Parse parses an NSF or NSFe file from raw bytes and returns its header metadata.
-// It detects NSFe by the presence of the "NSFE" magic and parses extension chunks
-// to populate per-track TrackInfo where available.
 func Parse(data []byte) (*Header, error) {
-	// TODO: implement
-	// 1. Check magic bytes at [0:5]
-	// 2. Read header fields using encoding/binary (little-endian)
-	// 3. If version == 2 or magic == "NSFE", parse extension chunks
-	return nil, errors.New("not implemented")
+	if len(data) < 5 {
+		return nil, fmt.Errorf("nsf: data too short to contain magic bytes")
+	}
+	if !bytes.Equal(data[0:5], magic) {
+		return nil, ErrInvalidMagic
+	}
+	if len(data) < 128 {
+		return nil, fmt.Errorf("nsf: header truncated: need 128 bytes, got %d", len(data))
+	}
+
+	return &Header{
+		TrackCount: int(data[6]),
+		FirstTrack: int(data[7]),
+		Title:      nullPaddedString(data[14:46]),
+		Artist:     nullPaddedString(data[46:78]),
+		Copyright:  nullPaddedString(data[78:110]),
+	}, nil
+}
+
+// nullPaddedString converts a fixed-length null-padded byte slice to a string,
+// trimming everything from the first null byte onward.
+func nullPaddedString(b []byte) string {
+	if i := bytes.IndexByte(b, 0); i >= 0 {
+		return string(b[:i])
+	}
+	return string(b)
 }
