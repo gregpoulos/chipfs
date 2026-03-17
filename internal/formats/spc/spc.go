@@ -62,8 +62,12 @@ func nullPaddedString(b []byte) string {
 }
 
 // parseASCIIInt parses a decimal integer from a fixed-width ASCII byte slice,
-// ignoring leading/trailing spaces. Returns 0 if the field is blank or unparseable.
+// ignoring leading/trailing spaces and null bytes. Returns 0 if the field is
+// blank or unparseable.
 func parseASCIIInt(b []byte) int {
+	if i := bytes.IndexByte(b, 0); i >= 0 {
+		b = b[:i]
+	}
 	s := strings.TrimSpace(string(b))
 	if s == "" {
 		return 0

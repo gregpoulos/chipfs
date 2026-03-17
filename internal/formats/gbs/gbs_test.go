@@ -1,6 +1,7 @@
 package gbs_test
 
 import (
+	"os"
 	"testing"
 
 	"github.com/gregpoulos/chipfs/internal/formats/gbs"
@@ -59,4 +60,20 @@ func TestParse_NullPaddedStringsAreTrimmed(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Tetris", h.Title)
 	assert.Equal(t, "Hirokazu Tanaka", h.Author)
+}
+
+// TestParse_Kirby tests against a real GBS file (Kirby's Dream Land) to catch
+// assumptions that synthetic fixtures might not exercise.
+func TestParse_Kirby(t *testing.T) {
+	data, err := os.ReadFile("../../../testdata/fixtures/kirby.gbs")
+	require.NoError(t, err, "testdata/fixtures/kirby.gbs must exist")
+
+	h, err := gbs.Parse(data)
+	require.NoError(t, err)
+
+	assert.Equal(t, 15, h.TrackCount)
+	assert.Equal(t, 1, h.FirstTrack)
+	assert.Equal(t, "Kirby's Dream Land", h.Title)
+	assert.Equal(t, "Jun Ishikawa", h.Author)
+	assert.Equal(t, "1992 Nintendo", h.Copyright)
 }
