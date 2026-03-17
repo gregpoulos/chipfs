@@ -160,9 +160,8 @@ ID666 field.
 
 ## Current Implementation Status
 
-Phase 1 (format parsers) is complete. All three parser packages are fully
-implemented and tested against both synthetic fixtures and real files. See
-[../TODO.md](../TODO.md) for the phase-by-phase checklist.
+Phases 1–3 are complete: format parsers, WAV muxer, and LRU track cache are
+fully implemented and tested. See [../TODO.md](../TODO.md) for the checklist.
 
-The next implementation target is `internal/wav` — the WAV muxer. Like the
-format parsers, it is pure Go with no CGO or FUSE dependencies.
+The next implementation target is `internal/gme` — the CGO wrapper around
+libgme. This is the first package that requires CGO and an external library.
