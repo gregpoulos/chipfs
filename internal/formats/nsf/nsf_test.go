@@ -246,11 +246,11 @@ func TestParseNSFe_WithDurations(t *testing.T) {
 	assert.Equal(t, 5_000, h.Tracks[1].FadeMs)
 }
 
-func TestParseNSFe_SkipsUnknownChunks(t *testing.T) {
-	// An unknown chunk ("BANK") between INFO and auth must be skipped gracefully.
+func TestParseNSFe_SkipsUnknownOptionalChunks(t *testing.T) {
+	// Unknown lowercase chunks are optional and must be silently skipped.
 	data := makeNSFe([]nsfeChunk{
 		infoChunk(1, 0),
-		{"BANK", []byte{0x00, 0x01, 0x02, 0x03}},
+		{"unkn", []byte{0x00, 0x01, 0x02, 0x03}},
 		authChunk("DuckTales", "Composer", "1989", ""),
 		nend,
 	})
@@ -259,6 +259,18 @@ func TestParseNSFe_SkipsUnknownChunks(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "DuckTales", h.Title)
+}
+
+func TestParseNSFe_RejectsUnknownMandatoryChunk(t *testing.T) {
+	// Unrecognized uppercase chunk IDs are mandatory; the file must be rejected.
+	data := makeNSFe([]nsfeChunk{
+		infoChunk(1, 0),
+		{"UNKN", []byte{0x00, 0x01}},
+		nend,
+	})
+
+	_, err := nsf.Parse(data)
+	assert.Error(t, err)
 }
 
 func TestParseNSFe_RejectsInvalidMagic(t *testing.T) {
@@ -278,7 +290,7 @@ func TestParseNSFe_MissingINFO(t *testing.T) {
 }
 
 func TestParseNSFe_TruncatedINFO(t *testing.T) {
-	// INFO chunk data must be at least 8 bytes.
+	// INFO chunk data must be at least 9 bytes.
 	data := makeNSFe([]nsfeChunk{
 		{"INFO", []byte{0x00, 0x80, 0x00, 0x80, 0x05}}, // only 5 bytes
 		nend,

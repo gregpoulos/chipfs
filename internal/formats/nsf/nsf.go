@@ -85,8 +85,8 @@ func parseNSFe(data []byte) (*Header, error) {
 
 		switch id {
 		case "INFO":
-			if size < 8 {
-				return nil, fmt.Errorf("nsfe: INFO chunk too short: need at least 8 bytes, got %d", size)
+			if size < 9 {
+				return nil, fmt.Errorf("nsfe: INFO chunk too short: need at least 9 bytes, got %d", size)
 			}
 			if size >= 9 {
 				h.TrackCount = int(chunk[8])
@@ -122,6 +122,17 @@ func parseNSFe(data []byte) (*Header, error) {
 
 		case "fade":
 			applyTrackInt32s(h, chunk, func(t *TrackInfo, v int) { t.FadeMs = v })
+
+		case "DATA", "BANK", "RATE", "NSF2", "VRC7", "taut", "plst", "psfx", "text", "mixe", "regn":
+			// Recognized but unimplemented: silently skip.
+
+		default:
+			// Per spec: unrecognized chunks whose first byte is uppercase (A–Z) are
+			// mandatory — the file must be rejected. Lowercase-first chunks are optional
+			// and silently skipped.
+			if id[0] >= 'A' && id[0] <= 'Z' {
+				return nil, fmt.Errorf("nsfe: unrecognized mandatory chunk %q", id)
+			}
 		}
 	}
 
