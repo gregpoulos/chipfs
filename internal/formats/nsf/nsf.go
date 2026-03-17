@@ -118,24 +118,10 @@ func parseNSFe(data []byte) (*Header, error) {
 			}
 
 		case "time":
-			for i := 0; i+4 <= len(chunk); i += 4 {
-				idx := i / 4
-				if h.TrackCount > 0 && idx >= h.TrackCount {
-					break
-				}
-				ensureTracks(h, idx+1)
-				h.Tracks[idx].DurationMs = int(int32(binary.LittleEndian.Uint32(chunk[i:])))
-			}
+			applyTrackInt32s(h, chunk, func(t *TrackInfo, v int) { t.DurationMs = v })
 
 		case "fade":
-			for i := 0; i+4 <= len(chunk); i += 4 {
-				idx := i / 4
-				if h.TrackCount > 0 && idx >= h.TrackCount {
-					break
-				}
-				ensureTracks(h, idx+1)
-				h.Tracks[idx].FadeMs = int(int32(binary.LittleEndian.Uint32(chunk[i:])))
-			}
+			applyTrackInt32s(h, chunk, func(t *TrackInfo, v int) { t.FadeMs = v })
 		}
 	}
 
@@ -143,6 +129,19 @@ func parseNSFe(data []byte) (*Header, error) {
 		return nil, fmt.Errorf("nsfe: required INFO chunk not found")
 	}
 	return h, nil
+}
+
+// applyTrackInt32s reads a packed array of little-endian int32 values from
+// chunk and calls set for each entry, bounded by h.TrackCount.
+func applyTrackInt32s(h *Header, chunk []byte, set func(*TrackInfo, int)) {
+	for i := 0; i+4 <= len(chunk); i += 4 {
+		idx := i / 4
+		if h.TrackCount > 0 && idx >= h.TrackCount {
+			break
+		}
+		ensureTracks(h, idx+1)
+		set(&h.Tracks[idx], int(int32(binary.LittleEndian.Uint32(chunk[i:]))))
+	}
 }
 
 // ensureTracks grows h.Tracks to at least n entries if needed.
@@ -157,7 +156,7 @@ func ensureTracks(h *Header, n int) {
 // splitNullTerminated splits data on null bytes, returning up to max strings.
 func splitNullTerminated(data []byte, max int) []string {
 	var result []string
-	for len(data) > 0 && (max <= 0 || len(result) < max) {
+	for len(data) > 0 && len(result) < max {
 		i := bytes.IndexByte(data, 0)
 		if i < 0 {
 			result = append(result, string(data))
