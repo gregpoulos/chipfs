@@ -9,9 +9,9 @@ FUSE), their correctness is fully verifiable with unit tests against synthesized
 binary fixtures, and all subsequent packages depend on the metadata they produce.
 
 - [x] `internal/formats/nsf` — NSF header parser (magic, track count, global metadata)
-- [ ] `internal/formats/nsf` — NSFe extension chunk parser (tlbl, time, fade, auth)
-- [ ] `internal/formats/gbs` — GBS header parser
-- [ ] `internal/formats/spc` — SPC ID666 tag parser (text format)
+- [x] `internal/formats/nsf` — NSFe extension chunk parser (tlbl, time, fade, auth)
+- [x] `internal/formats/gbs` — GBS header parser
+- [x] `internal/formats/spc` — SPC ID666 tag parser (text format)
 
 ## Phase 2: WAV Muxer
 
