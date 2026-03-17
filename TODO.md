@@ -13,14 +13,14 @@ binary fixtures, and all subsequent packages depend on the metadata they produce
 - [x] `internal/formats/gbs` — GBS header parser
 - [x] `internal/formats/spc` — SPC ID666 tag parser (text and binary format)
 
-## Phase 2: WAV Muxer (current)
+## Phase 2: WAV Muxer ✓
 
-- [ ] `internal/wav` — RIFF WAV header construction
-- [ ] `internal/wav` — ID3v2 tag building (TIT2, TPE1, TALB, TRCK, TDRC frames)
-- [ ] `internal/wav` — Embed ID3v2 as RIFF `id3 ` chunk
-- [ ] `internal/wav` — `EstimatedSize` must exactly match `Encode` output
+- [x] `internal/wav` — RIFF WAV header construction
+- [x] `internal/wav` — ID3v2 tag building (TIT2, TPE1, TALB, TRCK, TYER frames)
+- [x] `internal/wav` — Embed ID3v2 as RIFF `id3 ` chunk
+- [x] `internal/wav` — `EstimatedSize` must exactly match `Encode` output
 
-## Phase 3: Track Cache
+## Phase 3: Track Cache (current)
 
 - [ ] `internal/cache` — LRU eviction using `container/list` + `map`
 - [ ] `internal/cache` — Thread-safe Get/Set
