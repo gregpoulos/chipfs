@@ -160,9 +160,9 @@ ID666 field.
 
 ## Current Implementation Status
 
-All packages are present as stubs. Tests exist and currently fail. See
+Phase 1 (format parsers) is complete. All three parser packages are fully
+implemented and tested against both synthetic fixtures and real files. See
 [../TODO.md](../TODO.md) for the phase-by-phase checklist.
 
-The first implementation target is `internal/formats/nsf` — it has no dependencies
-on other internal packages, requires no CGO, and its tests exercise a well-specified
-binary format with a small fixed-size header.
+The next implementation target is `internal/wav` — the WAV muxer. Like the
+format parsers, it is pure Go with no CGO or FUSE dependencies.

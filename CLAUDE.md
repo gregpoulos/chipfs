@@ -23,7 +23,7 @@ brew install --cask macfuse
 
 ```bash
 go mod download
-go test ./...   # should compile cleanly; most tests will fail (expected red state)
+go test ./...   # implemented packages pass; stubs for unimplemented packages will fail
 ```
 
 ## TDD Workflow
@@ -38,6 +38,12 @@ This project uses red/green TDD. The cycle is:
 6. Move to the next item
 
 Never write implementation code before a failing test exists for it.
+
+Each format parser should have both synthetic-fixture tests (constructed in
+test code) and a real-file fixture test. Real files catch spec-vs-encoder
+divergence that synthetic fixtures miss — for example, real SPC files
+null-terminate duration fields while the spec implies space-padding, a
+difference that causes silent incorrect output rather than a test failure.
 
 ## Architecture Quick Reference
 
