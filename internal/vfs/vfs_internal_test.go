@@ -3,6 +3,7 @@ package vfs
 // Internal tests (package vfs, not vfs_test) so we can reach unexported types.
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"sync"
@@ -45,7 +46,7 @@ func TestTrackFile_ConcurrentReads(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			dest := make([]byte, 4096)
-			result, errno := tf.Read(nil, nil, dest, pcmOffset)
+			result, errno := tf.Read(context.Background(), nil, dest, pcmOffset)
 			assert.Equal(t, syscall.Errno(0), errno) // require is not safe outside the test goroutine
 			b, _ := result.Bytes(dest)
 			results[i] = b
@@ -103,7 +104,7 @@ func TestTrackFile_Read_RenderErrorReturnsEIO(t *testing.T) {
 
 	// Read at PCM offset to trigger renderTrack with the corrupt source.
 	dest := make([]byte, 65536)
-	result, errno := tf.Read(nil, nil, dest, int64(len(header)))
+	result, errno := tf.Read(context.Background(), nil, dest, int64(len(header)))
 
 	assert.Equal(t, syscall.EIO, errno, "render error must return EIO")
 	assert.Nil(t, result, "render error must return nil result")
@@ -193,7 +194,7 @@ func TestTrackFile_HeaderOnlyRead_NoEmulation(t *testing.T) {
 	}
 
 	dest := make([]byte, 12) // first 12 bytes = RIFF chunk header
-	result, errno := tf.Read(nil, nil, dest, 0)
+	result, errno := tf.Read(context.Background(), nil, dest, 0)
 	require.Equal(t, 0, int(errno))
 	require.NotNil(t, result)
 
@@ -229,7 +230,7 @@ func TestTrackFile_LargeBufferRead_HeaderPlusZeros(t *testing.T) {
 
 	// Large buffer, as a real FUSE client or ffprobe would use.
 	dest := make([]byte, 65536)
-	result, errno := tf.Read(nil, nil, dest, 0)
+	result, errno := tf.Read(context.Background(), nil, dest, 0)
 	require.Equal(t, 0, int(errno), "read must not error")
 	require.NotNil(t, result)
 
@@ -291,7 +292,7 @@ func TestRealFileHandle_Read(t *testing.T) {
 
 	// Read at offset 0.
 	dest := make([]byte, 5)
-	result, errno := h.Read(nil, dest, 0)
+	result, errno := h.Read(context.Background(), dest, 0)
 	require.Equal(t, syscall.Errno(0), errno)
 	b, st := result.Bytes(dest)
 	require.Equal(t, 0, int(st))
