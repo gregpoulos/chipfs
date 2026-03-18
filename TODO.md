@@ -71,6 +71,10 @@ binary fixtures, and all subsequent packages depend on the metadata they produce
 - [ ] `cmd/render` — Audit whether this package is still needed; remove it if it is dead code
 - [ ] Run `go test -race ./...` locally and resolve any races before CI is wired up
 - [ ] Smoke test — add a `-allow_other` invocation path so the flag has integration-level coverage, not just the unit test for flag parsing
+- [ ] `internal/wav` — Add `LIST INFO` RIFF chunk (INAM/IART/IPRD subchunks) alongside the existing `id3 ` chunk for compatibility with older WAV parsers (reviewer confirmed both coexist fine)
+- [ ] `internal/vfs` — Skip symlinks in `Root.OnAdd`: use `os.Lstat` and skip entries where `ModeSymlink` is set, so a symlink to `/etc/shadow` in the source dir is not served
+- [ ] `internal/vfs` — `sanitizeFilename`: also replace `..` sequences so a game title of `..` cannot create a directory with that name in the virtual tree
+- [ ] `internal/vfs` — Document (code comment + LIVING_SPEC) that the directory tree is a static snapshot taken at mount time; new files require remounting
 
 ## Deferred / Out of Scope for v1
 
