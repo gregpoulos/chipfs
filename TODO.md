@@ -65,6 +65,12 @@ binary fixtures, and all subsequent packages depend on the metadata they produce
 - [ ] `internal/vfs` — Thundering herd: concurrent cache misses for the same track trigger duplicate renders; use `golang.org/x/sync/singleflight` keyed by `(sourcePath, trackIdx)` to coalesce concurrent renders into one
 - [x] `internal/vfs` — Log the recovered value in `TrackFile.Read`'s `defer/recover` block (currently panics are silently swallowed as EIO with no diagnostic output)
 - [x] `buildTrackList` — Cap `durationMs` to a sane maximum (e.g., 20 minutes) to prevent a malformed file from claiming a huge duration, which would spike memory and wrap the `uint32` RIFF size field
+- [ ] `renderTrack` — `maxSamples` safety ceiling (15 min) is inconsistent with `clampMs` max (20 min + 60 s fade); the two limits should be derived from the same constant so they can't silently diverge
+- [ ] `internal/vfs` — `RealFile.Read` opens and closes the file on every FUSE read call; use go-fuse's `FileHandle` to hold an open fd across reads and close it in `Release`
+- [ ] `internal/vfs` — Panic test (`TestTrackFile_Read_PanicReturnsEIO`) uses an artificial `estimatedSize=-1` trigger; replace with a corrupt NSF fixture so the test exercises the real failure path (libgme panicking on bad input)
+- [ ] `cmd/render` — Audit whether this package is still needed; remove it if it is dead code
+- [ ] Run `go test -race ./...` locally and resolve any races before CI is wired up
+- [ ] Smoke test — add a `-allow_other` invocation path so the flag has integration-level coverage, not just the unit test for flag parsing
 
 ## Deferred / Out of Scope for v1
 
