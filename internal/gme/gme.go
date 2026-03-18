@@ -24,6 +24,30 @@ package gme
 #cgo linux LDFLAGS: -lgme
 #include <gme/gme.h>
 #include <stdlib.h>
+
+// libgme 0.6.4 added gme_set_fade_msecs and the fade_length field in
+// gme_info_t. Debian bookworm ships 0.6.3 which has neither.
+// Both shims below degrade gracefully on older versions.
+
+// chipfs_set_fade: calls gme_set_fade_msecs when available; falls back to
+// gme_set_fade (fade_ms ignored, libgme uses its internal 8-second default).
+#if defined(GME_VERSION) && GME_VERSION >= 0x000604
+static void chipfs_set_fade(Music_Emu* emu, int start_ms, int fade_ms) {
+    gme_set_fade_msecs(emu, start_ms, fade_ms);
+}
+static int chipfs_fade_length(gme_info_t* info) {
+    return info->fade_length;
+}
+#else
+static void chipfs_set_fade(Music_Emu* emu, int start_ms, int fade_ms) {
+    (void)fade_ms;
+    gme_set_fade(emu, start_ms);
+}
+static int chipfs_fade_length(gme_info_t* info) {
+    (void)info;
+    return -1; // not available; caller treats -1 as "use default"
+}
+#endif
 */
 import "C"
 
@@ -95,7 +119,7 @@ func (e *Emu) TrackInfo(index int) (TrackInfo, error) {
 		System:    C.GoString(info.system),
 		Comment:   C.GoString(info.comment),
 		PlayMs:    int(info.play_length),
-		FadeMs:    int(info.fade_length),
+		FadeMs:    int(C.chipfs_fade_length(info)),
 		IntroMs:   int(info.intro_length),
 		LoopMs:    int(info.loop_length),
 	}, nil
@@ -114,7 +138,7 @@ func (e *Emu) StartTrack(index int) error {
 // linear fade from startMs and signals completion via TrackEnded once
 // startMs+fadeLengthMs of audio has been rendered.
 func (e *Emu) SetFade(startMs, fadeLengthMs int) {
-	C.gme_set_fade_msecs(e.handle, C.int(startMs), C.int(fadeLengthMs))
+	C.chipfs_set_fade(e.handle, C.int(startMs), C.int(fadeLengthMs))
 }
 
 // Play fills buf with the next len(buf) interleaved stereo int16 PCM samples.

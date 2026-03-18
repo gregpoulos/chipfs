@@ -87,6 +87,40 @@ same duration and options. This invariant is critical: FUSE `getattr` reports
 to truncate or reject the stream. The test `TestEstimatedSize_MatchesActualEncodeOutput`
 enforces this.
 
+## Known Pitfalls
+
+**CGO preamble comments must use `//`, never `/* */`.** The CGO preamble is
+delimited by a Go `/* */` block comment. Any C-style `/* ... */` inside it
+contains `*/` which prematurely closes the block comment, causing opaque Go
+parse errors (`non-declaration statement outside function body`, etc.).
+Always use `//` line comments inside CGO preambles.
+
+**Check the target platform's library version before writing CGO wrappers.**
+macOS Homebrew and Debian bookworm often ship different library versions with
+incompatible APIs. For libgme: Homebrew provides 0.6.4 (has `gme_set_fade_msecs`
+and `gme_info_t.fade_length`); Debian bookworm ships 0.6.3 (neither). The
+pattern for bridging version differences is a version-gated C shim in the CGO
+preamble (`#if defined(LIB_VERSION) && LIB_VERSION >= 0xXXXXXX`). Confirm the
+Debian package version with `apt-cache show <pkg>` before writing any CGO calls,
+and run `docker build --target builder .` after writing the wrapper to catch
+version errors before the rest of the implementation.
+
+**go-fuse NodeReader requires NodeOpener to be implemented.** Without an
+explicit `Open()` method, the FUSE kernel module may return EOPNOTSUPP
+("Operation not supported") for all reads on a file node, even if `NodeReader`
+is correctly implemented. Always implement `NodeOpener` alongside `NodeReader`.
+For virtual files that manage their own cache, use `FOPEN_DIRECT_IO` to bypass
+the kernel page cache; for passthrough files, use `FOPEN_KEEP_CACHE`.
+
+**FUSE read buffers are large.** The FUSE kernel module passes read requests
+with the kernel's configured `max_read` buffer (default 128 KB). Never assume
+`len(dest)` in a `NodeReader.Read` call matches the logical data size being
+requested. In particular: a read of offset 0 with `len(dest)=131072` on a file
+whose WAV header is 150 bytes will have `off + len(dest) >> len(header)`. See
+`TrackFile.Read` for the correct pattern: serve header bytes + zero-fill for
+any bytes beyond the header, so clients get a full-sized response without a
+short-read that some parsers treat as EOF.
+
 ## Available Skills
 
 - `/simplify` — After completing an implementation phase, use this to review

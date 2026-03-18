@@ -125,8 +125,13 @@ type RealFile struct {
 	path string
 }
 
+var _ fs.NodeOpener = (*RealFile)(nil)
 var _ fs.NodeGetattrer = (*RealFile)(nil)
 var _ fs.NodeReader = (*RealFile)(nil)
+
+func (f *RealFile) Open(_ context.Context, _ uint32) (fs.FileHandle, uint32, syscall.Errno) {
+	return nil, gofuse.FOPEN_KEEP_CACHE, 0
+}
 
 func (f *RealFile) Getattr(_ context.Context, _ fs.FileHandle, out *gofuse.AttrOut) syscall.Errno {
 	st, err := os.Stat(f.path)
@@ -309,8 +314,16 @@ type TrackFile struct {
 	cache         *cache.Cache
 }
 
+var _ fs.NodeOpener = (*TrackFile)(nil)
 var _ fs.NodeGetattrer = (*TrackFile)(nil)
 var _ fs.NodeReader = (*TrackFile)(nil)
+
+// Open tells the FUSE kernel to use direct I/O for this virtual file, bypassing
+// the kernel page cache. All reads come directly to our Read handler, which
+// implements its own lazy-render + LRU cache logic.
+func (f *TrackFile) Open(_ context.Context, _ uint32) (fs.FileHandle, uint32, syscall.Errno) {
+	return nil, gofuse.FOPEN_DIRECT_IO, 0
+}
 
 func (f *TrackFile) Getattr(_ context.Context, _ fs.FileHandle, out *gofuse.AttrOut) syscall.Errno {
 	out.Mode = syscall.S_IFREG | 0444
@@ -329,10 +342,21 @@ func (f *TrackFile) Read(_ context.Context, _ fs.FileHandle, dest []byte, off in
 		}
 	}
 
-	// Cache miss: if the read falls entirely within the pre-built header, serve
-	// it without emulation.
-	if off+int64(len(dest)) <= int64(len(f.header)) {
-		return gofuse.ReadResultData(sliceAt(f.header, dest, off)), 0
+	// Cache miss: if the read starts within the pre-built header, serve the
+	// header bytes and fill any requested bytes beyond the header with zeros.
+	// Returning a full-sized response (no short read) prevents parsers like
+	// ffprobe from treating the file as truncated. The zero-filled PCM region
+	// is correct silence — the real PCM is served once a PCM-region read
+	// triggers emulation and populates the cache.
+	if off < int64(len(f.header)) {
+		end := off + int64(len(dest))
+		if end > f.estimatedSize {
+			end = f.estimatedSize
+		}
+		result := make([]byte, end-off)
+		copy(result, f.header[off:])
+		// bytes beyond the header remain zero (silence before render)
+		return gofuse.ReadResultData(result), 0
 	}
 
 	// Read touches the PCM region: render the full track.

@@ -102,7 +102,11 @@ func TestTrackEnded_AfterFade(t *testing.T) {
 	emu.SetFade(0, 500) // start fading immediately, 500ms fade → ends after ~500ms
 
 	buf := make([]int16, 4096) // ~46ms per iteration at 44100Hz stereo
-	for i := 0; i < 50; i++ { // 50 × 46ms ≈ 2.3s — well past the 500ms fade
+	// 200 iterations ≈ 9.2s of audio. This covers both libgme >= 0.6.4
+	// (gme_set_fade_msecs: fade ends at 500ms) and older libgme (gme_set_fade
+	// fallback: 8-second default fade ends at ~8s). Emulation runs much
+	// faster than real-time so 200 iterations completes in milliseconds.
+	for i := 0; i < 200; i++ {
 		if emu.TrackEnded() {
 			return
 		}

@@ -86,6 +86,8 @@ audio sounds correct and metadata (title, artist, album) is populated.
 
 ## Docker (Linux, for CI or NAS deployment)
 
+Build the production image and run it:
+
 ```bash
 docker build -t chipfs .
 docker run --rm \
@@ -95,6 +97,16 @@ docker run --rm \
   -v /your/chiptunes:/source:ro \
   -v /your/mountpoint:/mnt/chipfs:shared \
   chipfs -source /source -mountpoint /mnt/chipfs
+```
+
+### Smoke test
+
+Verifies the virtual directory structure, track counts, WAV metadata, and
+the file size invariant against the bundled fixtures:
+
+```bash
+docker build --target smoke-test -t chipfs-smoke .
+docker run --rm --cap-add SYS_ADMIN --device /dev/fuse chipfs-smoke
 ```
 
 ## Supported Formats

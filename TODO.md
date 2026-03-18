@@ -43,14 +43,16 @@ binary fixtures, and all subsequent packages depend on the metadata they produce
       only start the emulator if the read offset reaches the `data` chunk.
 - [x] `cmd/chipfs` — Wire everything together: parse flags, call `fuse.Mount`, SIGINT/SIGTERM handling
 
-## Phase 6: Integration & Hardening
+## Phase 6: Integration & Hardening (current)
 
-- [ ] Docker: confirm FUSE mount works with `--cap-add SYS_ADMIN --device /dev/fuse`
+- [x] Dockerfile — multi-stage build (builder + runtime + smoke-test targets)
+- [x] `scripts/smoke-test.sh` — verifies virtual dir structure, track counts, WAV metadata, and file size invariant inside Docker
+- [ ] Run smoke test: `docker build --target smoke-test -t chipfs-smoke . && docker run --rm --cap-add SYS_ADMIN --device /dev/fuse chipfs-smoke`
 - [ ] Navidrome: confirm scanner reads Artist/Album/Title correctly from virtual WAVs
 - [ ] Stress test with `fsstress` (Linux kernel tool)
-- [ ] Mount option: `-o default_length=180` (seconds for tracks without duration metadata)
-- [ ] Mount option: `-o fade_length=8`
-- [ ] Mount option: `-o cache_size_mb=256`
+- [ ] Mount option: `-default_length` (seconds for tracks without duration metadata)
+- [ ] Mount option: `-fade_length`
+- [ ] Mount option: `-cache_size_mb`
 - [ ] RSN support (RAR containing multiple SPCs) — optional, via libarchive
 
 ## Deferred / Out of Scope for v1

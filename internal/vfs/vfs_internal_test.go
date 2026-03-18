@@ -84,6 +84,52 @@ func TestTrackFile_HeaderOnlyRead_NoEmulation(t *testing.T) {
 	assert.Equal(t, header[:12], got, "first 12 bytes must match RIFF header")
 }
 
+// TestTrackFile_LargeBufferRead_HeaderPlusZeros verifies that a read starting
+// in the header region with a buffer larger than the header returns the full
+// requested size (header bytes + silence zeros), not a short read. This
+// matches the behavior expected by streaming parsers like ffprobe which treat
+// short reads on seekable files as truncation errors.
+func TestTrackFile_LargeBufferRead_HeaderPlusZeros(t *testing.T) {
+	opts := wav.Options{
+		SampleRate: 44100,
+		Channels:   2,
+		Metadata:   wav.Metadata{Title: "Test Track", Album: "Test Game"},
+	}
+	const totalMs = 10_000
+	header := wav.HeaderBytes(totalMs, opts)
+	estimatedSize := wav.EstimatedSize(totalMs, opts)
+	tf := &TrackFile{
+		sourcePath:    "/nonexistent/path/that/cannot/be/opened.nsf",
+		trackIdx:      0,
+		playMs:        totalMs - 8_000,
+		fadeMs:        8_000,
+		opts:          opts,
+		header:        header,
+		estimatedSize: estimatedSize,
+		cache:         nil,
+	}
+
+	// Large buffer, as a real FUSE client or ffprobe would use.
+	dest := make([]byte, 65536)
+	result, errno := tf.Read(nil, nil, dest, 0)
+	require.Equal(t, 0, int(errno), "read must not error")
+	require.NotNil(t, result)
+
+	got, st := result.Bytes(dest)
+	require.Equal(t, 0, int(st))
+
+	// Must return full requested size (no short read).
+	assert.Equal(t, len(dest), len(got), "must return full buffer, not a short read")
+	// First bytes must be the real WAV header.
+	assert.Equal(t, header, got[:len(header)], "header bytes must be correct")
+	// Bytes beyond the header must be zeros (silence before render).
+	for i := len(header); i < len(got); i++ {
+		if got[i] != 0 {
+			t.Fatalf("byte %d beyond header is %d, want 0 (silence)", i, got[i])
+		}
+	}
+}
+
 func TestTrackFile_EstimatedSizeMatchesRenderOutput(t *testing.T) {
 	// Full pipeline test using a real fixture: rendered WAV must have exactly
 	// EstimatedSize bytes. This verifies the sample-trimming in renderTrack.
