@@ -288,7 +288,7 @@ func TestRealFileHandle_Read(t *testing.T) {
 	of, err := os.Open(f.Name())
 	require.NoError(t, err)
 	h := &realFileHandle{file: of}
-	defer h.Release(nil)
+	defer h.Release(context.Background())
 
 	// Read at offset 0.
 	dest := make([]byte, 5)
@@ -300,7 +300,7 @@ func TestRealFileHandle_Read(t *testing.T) {
 
 	// Read at non-zero offset.
 	dest2 := make([]byte, 6)
-	result2, errno2 := h.Read(nil, dest2, 7)
+	result2, errno2 := h.Read(context.Background(), dest2, 7)
 	require.Equal(t, syscall.Errno(0), errno2)
 	b2, _ := result2.Bytes(dest2)
 	assert.Equal(t, []byte("world!"), b2)
@@ -320,7 +320,7 @@ func TestRealFileHandle_Release_ClosesFile(t *testing.T) {
 	require.NoError(t, err)
 	h := &realFileHandle{file: of}
 
-	errno := h.Release(nil)
+	errno := h.Release(context.Background())
 	assert.Equal(t, syscall.Errno(0), errno)
 
 	// After Release the fd is closed; ReadAt must fail.
