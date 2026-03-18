@@ -86,6 +86,15 @@ func TestSanitizeFilename_ReplacesSlashAndColon(t *testing.T) {
 	assert.Equal(t, "no change", sanitizeFilename("no change"))
 }
 
+func TestSanitizeFilename_RejectsDotDot(t *testing.T) {
+	// A game title of ".." or "." must not produce a directory with special
+	// path meaning; other names that merely contain dots are fine.
+	assert.Equal(t, "_", sanitizeFilename(".."))
+	assert.Equal(t, "_", sanitizeFilename("."))
+	assert.Equal(t, "...And Justice for All", sanitizeFilename("...And Justice for All"))
+	assert.Equal(t, "file.name", sanitizeFilename("file.name"))
+}
+
 func TestTrackFile_HeaderOnlyRead_NoEmulation(t *testing.T) {
 	// Build a TrackFile with a known header but a source path that cannot be
 	// opened by the emulator. If Read correctly serves from the pre-built

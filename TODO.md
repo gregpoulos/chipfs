@@ -69,12 +69,13 @@ binary fixtures, and all subsequent packages depend on the metadata they produce
 - [ ] `internal/vfs` — `RealFile.Read` opens and closes the file on every FUSE read call; use go-fuse's `FileHandle` to hold an open fd across reads and close it in `Release`
 - [ ] `internal/vfs` — Panic test (`TestTrackFile_Read_PanicReturnsEIO`) uses an artificial `estimatedSize=-1` trigger; replace with a corrupt NSF fixture so the test exercises the real failure path (libgme panicking on bad input)
 - [ ] `cmd/render` — Audit whether this package is still needed; remove it if it is dead code
-- [ ] Run `go test -race ./...` locally and resolve any races before CI is wired up
+- [x] Run `go test -race ./...` locally and resolve any races before CI is wired up
 - [ ] Smoke test — add a `-allow_other` invocation path so the flag has integration-level coverage, not just the unit test for flag parsing
 - [ ] `internal/wav` — Add `LIST INFO` RIFF chunk (INAM/IART/IPRD subchunks) alongside the existing `id3 ` chunk for compatibility with older WAV parsers (reviewer confirmed both coexist fine)
-- [ ] `internal/vfs` — Skip symlinks in `Root.OnAdd`: use `os.Lstat` and skip entries where `ModeSymlink` is set, so a symlink to `/etc/shadow` in the source dir is not served
-- [ ] `internal/vfs` — `sanitizeFilename`: also replace `..` sequences so a game title of `..` cannot create a directory with that name in the virtual tree
-- [ ] `internal/vfs` — Document (code comment + LIVING_SPEC) that the directory tree is a static snapshot taken at mount time; new files require remounting
+- [x] `internal/vfs` — Skip symlinks in `Root.OnAdd`: use `e.Type().IsRegular()` to allow only regular files, blocking symlinks, devices, and other special files from being served
+- [x] `internal/vfs` — `sanitizeFilename`: replace lone `.` and `..` results with `_` so a game title of `..` cannot produce a directory with special path meaning
+- [x] `internal/vfs` — Document (code comment + LIVING_SPEC) that the directory tree is a static snapshot taken at mount time; new files require remounting
+- [x] `renderTrack` — `maxSamples` safety ceiling now derived from `maxPlayMs`/`maxFadeMs` constants, consistent with `clampMs`; same fix applied to `cmd/render`
 
 ## Deferred / Out of Scope for v1
 

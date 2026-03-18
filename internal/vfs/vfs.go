@@ -47,8 +47,16 @@ import (
 	gofuse "github.com/hanwen/go-fuse/v2/fuse"
 )
 
-// defaultCacheBytes is the default LRU cache capacity (256 MB).
-const defaultCacheBytes = 256 * 1024 * 1024
+const (
+	// defaultCacheBytes is the default LRU cache capacity (256 MB).
+	defaultCacheBytes = 256 * 1024 * 1024
+
+	// maxPlayMs and maxFadeMs are the upper bounds applied by clampMs and used
+	// as the render-loop safety ceiling in renderTrack. Both must agree so a
+	// clamped duration can never exceed the loop's stopping condition.
+	maxPlayMs = 20 * 60 * 1000 // 20 minutes
+	maxFadeMs = 60 * 1000      // 60 seconds
+)
 
 // ---------------------------------------------------------------------------
 // Root
@@ -82,13 +90,20 @@ func NewRoot(sourceDir string) (*Root, error) {
 
 // OnAdd is called by go-fuse when the root inode is initialized (at mount
 // time). It scans the source directory and populates the virtual tree.
+//
+// The tree is a static snapshot: files added to the source directory after
+// mounting are not visible until chipfs is restarted.
 func (r *Root) OnAdd(ctx context.Context) {
 	entries, err := os.ReadDir(r.sourceDir)
 	if err != nil {
 		return
 	}
 	for _, e := range entries {
-		if e.IsDir() {
+		// Only expose regular files. Symlinks are skipped deliberately: a
+		// symlink pointing outside the source directory (e.g. to /etc/shadow)
+		// would be followed transparently by RealFile, bypassing the source
+		// directory boundary. Devices, pipes, and sockets are also skipped.
+		if !e.Type().IsRegular() {
 			continue
 		}
 		name := e.Name()
@@ -203,8 +218,8 @@ func buildTrackList(path string) []trackEntry {
 			continue
 		}
 
-		playMs := clampMs(ti.PlayMs, 180_000, 20*60*1000)
-		fadeMs := clampMs(ti.FadeMs, 8_000, 60*1000)
+		playMs := clampMs(ti.PlayMs, 180_000, maxPlayMs)
+		fadeMs := clampMs(ti.FadeMs, 8_000, maxFadeMs)
 
 		title := ti.Title
 		if title == "" {
@@ -251,7 +266,11 @@ func sanitizeFilename(s string) string {
 			b.WriteRune(r)
 		}
 	}
-	return strings.TrimSpace(b.String())
+	result := strings.TrimSpace(b.String())
+	if result == "." || result == ".." {
+		return "_"
+	}
+	return result
 }
 
 // ---------------------------------------------------------------------------
@@ -399,7 +418,7 @@ func (f *TrackFile) renderTrack() ([]byte, error) {
 
 	const chunkLen = 4096
 	sr, ch := f.opts.SampleRate, f.opts.Channels
-	maxSamples := 15 * 60 * sr * ch
+	maxSamples := ((maxPlayMs + maxFadeMs) * sr / 1000) * ch
 	capacity := ((f.playMs + f.fadeMs) * sr / 1000) * ch
 	allSamples := make([]int16, 0, capacity)
 	chunk := make([]int16, chunkLen)

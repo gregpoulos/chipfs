@@ -91,8 +91,12 @@ func run(filePath string, trackIdx int, outPath string, overrideDurationMs, over
 	}
 	emu.SetFade(durationMs, fadeMs)
 
-	const chunkLen = 4096
-	maxSamples := 15 * 60 * 44100 * 2
+	const (
+		chunkLen  = 4096
+		maxPlayMs = 20 * 60 * 1000 // must match vfs.maxPlayMs
+		maxFadeMs = 60 * 1000      // must match vfs.maxFadeMs
+	)
+	maxSamples := ((maxPlayMs + maxFadeMs) * 44100 / 1000) * 2
 	allSamples := make([]int16, 0, ((durationMs+fadeMs)*44100/1000)*2)
 	chunk := make([]int16, chunkLen)
 
