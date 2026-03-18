@@ -80,22 +80,15 @@ func TestEncode_ID3ChunkPresentAfterFmt(t *testing.T) {
 	assert.Equal(t, []byte("id3 "), out[36:40], "id3 chunk must follow fmt chunk")
 }
 
-func TestEncode_DataChunkFollowsID3(t *testing.T) {
+func TestEncode_DataChunkPresent(t *testing.T) {
 	samples := make([]int16, 100)
 	opts := wav.Options{SampleRate: 44100, Channels: 2}
 	out, err := wav.Encode(samples, opts)
 	require.NoError(t, err)
 
-	// Parse id3 chunk size to find where the data chunk starts.
-	id3Size := int(binary.LittleEndian.Uint32(out[40:44]))
-	id3PaddedSize := id3Size
-	if id3PaddedSize%2 != 0 {
-		id3PaddedSize++
-	}
-	dataChunkOffset := 36 + 8 + id3PaddedSize
-
-	require.Less(t, dataChunkOffset+4, len(out), "output too short to contain data chunk")
-	assert.Equal(t, []byte("data"), out[dataChunkOffset:dataChunkOffset+4])
+	offset, _ := findChunk(out, "data")
+	require.NotEqual(t, -1, offset, "data chunk must be present")
+	assert.Equal(t, []byte("data"), out[offset:offset+4])
 }
 
 func TestEncode_PCMSamplesAreCorrect(t *testing.T) {
@@ -105,13 +98,10 @@ func TestEncode_PCMSamplesAreCorrect(t *testing.T) {
 	out, err := wav.Encode(samples, opts)
 	require.NoError(t, err)
 
-	// Find the data chunk offset.
-	id3Size := int(binary.LittleEndian.Uint32(out[40:44]))
-	id3PaddedSize := id3Size
-	if id3PaddedSize%2 != 0 {
-		id3PaddedSize++
-	}
-	pcmOffset := 36 + 8 + id3PaddedSize + 8 // skip data chunk header too
+	// Find the data chunk and skip its 8-byte header to reach PCM samples.
+	dataOffset, _ := findChunk(out, "data")
+	require.NotEqual(t, -1, dataOffset, "data chunk must be present")
+	pcmOffset := dataOffset + 8
 
 	require.LessOrEqual(t, pcmOffset+6, len(out))
 	assert.Equal(t, byte(0x34), out[pcmOffset+0]) // 0x1234 low byte
@@ -184,6 +174,64 @@ func TestEstimatedSize_MatchesActualEncodeOutput(t *testing.T) {
 	estimated := wav.EstimatedSize(durationMs, opts)
 	assert.Equal(t, int64(len(actual)), estimated,
 		"EstimatedSize must exactly predict the output of Encode for the same duration")
+}
+
+// findChunk scans a RIFF WAVE file for a top-level chunk with the given 4-byte
+// ID and returns its offset (pointing at the 4-byte ID, not the data) and size.
+// Returns -1 if not found.
+func findChunk(data []byte, id string) (offset, size int) {
+	pos := 12 // skip RIFF+size+WAVE
+	for pos+8 <= len(data) {
+		chunkID := string(data[pos : pos+4])
+		chunkSize := int(binary.LittleEndian.Uint32(data[pos+4 : pos+8]))
+		if chunkID == id {
+			return pos, chunkSize
+		}
+		pos += 8 + chunkSize
+		if chunkSize%2 != 0 {
+			pos++ // skip pad byte
+		}
+	}
+	return -1, 0
+}
+
+func TestEncode_ListInfoChunkPresent(t *testing.T) {
+	samples := make([]int16, 100)
+	opts := wav.Options{
+		SampleRate: 44100,
+		Channels:   2,
+		Metadata:   wav.Metadata{Title: "Flash Man", Artist: "Tateishi", Album: "Mega Man 2"},
+	}
+	out, err := wav.Encode(samples, opts)
+	require.NoError(t, err)
+
+	offset, size := findChunk(out, "LIST")
+	require.NotEqual(t, -1, offset, "LIST chunk must be present")
+	require.GreaterOrEqual(t, size, 4, "LIST chunk must contain at least INFO marker")
+	require.LessOrEqual(t, offset+8+size, len(out))
+
+	// LIST chunk data starts with "INFO"
+	assert.Equal(t, []byte("INFO"), out[offset+8:offset+12])
+
+	// Subchunk content must contain the metadata fields
+	listContent := string(out[offset+8 : offset+8+size])
+	assert.Contains(t, listContent, "INAM")
+	assert.Contains(t, listContent, "Flash Man")
+	assert.Contains(t, listContent, "IART")
+	assert.Contains(t, listContent, "Tateishi")
+	assert.Contains(t, listContent, "IPRD")
+	assert.Contains(t, listContent, "Mega Man 2")
+}
+
+func TestEncode_ListInfoChunk_EmptyMetadata(t *testing.T) {
+	// When no metadata fields are set, no LIST chunk should be emitted.
+	samples := make([]int16, 100)
+	opts := wav.Options{SampleRate: 44100, Channels: 2} // no Metadata
+	out, err := wav.Encode(samples, opts)
+	require.NoError(t, err)
+
+	offset, _ := findChunk(out, "LIST")
+	assert.Equal(t, -1, offset, "LIST chunk must be absent when metadata is empty")
 }
 
 func TestHeaderBytes_IsExactPrefixOfEncode(t *testing.T) {

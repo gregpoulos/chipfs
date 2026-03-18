@@ -30,19 +30,20 @@ type Options struct {
 }
 
 // Encode encodes the given int16 PCM samples into a complete WAV byte slice.
-// An ID3v2.3 tag is embedded as a RIFF "id3 " chunk before the "data" chunk
-// so that taglib-based scanners (including Navidrome) can read the metadata
-// without a separate sidecar file.
+// An ID3v2.3 tag is embedded as a RIFF "id3 " chunk and a RIFF "LIST INFO"
+// chunk before the "data" chunk, providing metadata to both taglib-based
+// scanners (including Navidrome) and older WAV parsers that only read INFO.
 //
 // Output layout:
 //
-//	RIFF header (12 bytes) → fmt chunk (24 bytes) → id3 chunk → data chunk
+//	RIFF header (12 bytes) → fmt chunk (24 bytes) → id3 chunk → LIST INFO chunk → data chunk
 func Encode(samples []int16, opts Options) ([]byte, error) {
 	id3Data := buildID3v2(opts.Metadata)
 	id3PaddedSize := paddedSize(len(id3Data))
+	listInfo := buildListInfo(opts.Metadata)
 	pcmBytes := len(samples) * 2
 
-	totalSize := 12 + 24 + 8 + id3PaddedSize + 8 + pcmBytes
+	totalSize := 12 + 24 + 8 + id3PaddedSize + len(listInfo) + 8 + pcmBytes
 	buf := make([]byte, totalSize)
 	pos := 0
 
@@ -76,6 +77,9 @@ func Encode(samples []int16, opts Options) ([]byte, error) {
 	pos += copy(buf[pos:], id3Data)
 	pos += id3PaddedSize - len(id3Data) // zero pad byte if needed
 
+	// LIST INFO chunk (omitted when metadata is empty)
+	pos += copy(buf[pos:], listInfo)
+
 	// data chunk
 	pos += copy(buf[pos:], "data")
 	binary.LittleEndian.PutUint32(buf[pos:], uint32(pcmBytes))
@@ -99,10 +103,11 @@ func Encode(samples []int16, opts Options) ([]byte, error) {
 func HeaderBytes(durationMs int, opts Options) []byte {
 	id3Data := buildID3v2(opts.Metadata)
 	id3PaddedSize := paddedSize(len(id3Data))
+	listInfo := buildListInfo(opts.Metadata)
 	pcmBytes := (durationMs * opts.SampleRate / 1000) * opts.Channels * 2
-	totalSize := 12 + 24 + 8 + id3PaddedSize + 8 + pcmBytes
+	totalSize := 12 + 24 + 8 + id3PaddedSize + len(listInfo) + 8 + pcmBytes
 
-	headerLen := 12 + 24 + 8 + id3PaddedSize + 8
+	headerLen := 12 + 24 + 8 + id3PaddedSize + len(listInfo) + 8
 	buf := make([]byte, headerLen)
 	pos := 0
 
@@ -136,6 +141,9 @@ func HeaderBytes(durationMs int, opts Options) []byte {
 	pos += copy(buf[pos:], id3Data)
 	pos += id3PaddedSize - len(id3Data)
 
+	// LIST INFO chunk (omitted when metadata is empty)
+	pos += copy(buf[pos:], listInfo)
+
 	// data chunk header (size field only, no PCM bytes)
 	pos += copy(buf[pos:], "data")
 	binary.LittleEndian.PutUint32(buf[pos:], uint32(pcmBytes))
@@ -152,8 +160,52 @@ func HeaderBytes(durationMs int, opts Options) []byte {
 // duration, sample rate, channel count, and the fixed-size ID3v2 tag.
 func EstimatedSize(durationMs int, opts Options) int64 {
 	id3PaddedSize := paddedSize(len(buildID3v2(opts.Metadata)))
+	listInfoSize := len(buildListInfo(opts.Metadata))
 	pcmBytes := (durationMs * opts.SampleRate / 1000) * opts.Channels * 2
-	return int64(12 + 24 + 8 + id3PaddedSize + 8 + pcmBytes)
+	return int64(12 + 24 + 8 + id3PaddedSize + listInfoSize + 8 + pcmBytes)
+}
+
+// buildListInfo constructs a RIFF LIST INFO chunk containing INAM (title),
+// IART (artist), and IPRD (album/product) subchunks. Returns nil when no
+// metadata fields are set, so the chunk is omitted entirely for bare WAV files.
+//
+// LIST INFO is a standard RIFF extension understood by Windows Media Player,
+// Winamp, and other WAV parsers that do not read the "id3 " chunk. Both chunks
+// coexist in the same file; taglib-based parsers (Navidrome) prefer the id3 chunk.
+func buildListInfo(meta Metadata) []byte {
+	var subchunks []byte
+	if meta.Title != "" {
+		subchunks = append(subchunks, infoSubchunk("INAM", meta.Title)...)
+	}
+	if meta.Artist != "" {
+		subchunks = append(subchunks, infoSubchunk("IART", meta.Artist)...)
+	}
+	if meta.Album != "" {
+		subchunks = append(subchunks, infoSubchunk("IPRD", meta.Album)...)
+	}
+	if len(subchunks) == 0 {
+		return nil
+	}
+	// LIST chunk: "LIST" (4) + size (4) + "INFO" (4) + subchunks
+	buf := make([]byte, 12+len(subchunks))
+	copy(buf[0:], "LIST")
+	binary.LittleEndian.PutUint32(buf[4:], uint32(4+len(subchunks)))
+	copy(buf[8:], "INFO")
+	copy(buf[12:], subchunks)
+	return buf
+}
+
+// infoSubchunk builds a single LIST INFO subchunk: 4-byte ID + 4-byte LE size
+// + null-terminated string, padded to even length.
+func infoSubchunk(id, text string) []byte {
+	strLen := len(text) + 1 // include null terminator
+	total := 8 + paddedSize(strLen)
+	buf := make([]byte, total)
+	copy(buf[0:], id)
+	binary.LittleEndian.PutUint32(buf[4:], uint32(strLen))
+	copy(buf[8:], text)
+	// buf[8+len(text)] = 0x00 (null terminator, already zero from make)
+	return buf
 }
 
 // buildID3v2 constructs an ID3v2.3 tag from the given metadata.
