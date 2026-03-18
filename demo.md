@@ -90,22 +90,22 @@ On Linux (or in Docker with `--cap-add SYS_ADMIN --device /dev/fuse`), ChipFS mo
 
     ./chipfs -source /path/to/chiptunes -mountpoint /mnt/chipfs
 
-Given a source directory containing `Super Mario Bros..nsf` (18 tracks), `DuckTales.nsfe` (16 named tracks), `Castlevania.gbs`, and `Chrono Trigger.spc` (1 track), the mountpoint appears as:
+Given a source directory containing `game.nsf` (18 tracks), `game2.nsfe` (16 named tracks), `game3.gbs`, and `song.spc` (1 track), the mountpoint appears as:
 
     /mnt/chipfs/
-      Super Mario Bros..nsf          ← original file, passthrough
-      Super Mario Bros./
+      game.nsf                 ← original file, passthrough
+      game/
         Track_01.wav … Track_18.wav
-      DuckTales.nsfe
-      DuckTales/
-        Moon Theme.wav
-        African Mines.wav  …
-      Castlevania.gbs
-      Castlevania/
+      game2.nsfe
+      game2/
+        Level 1.wav
+        Level 2.wav  …
+      game3.gbs
+      game3/
         Track_01.wav  …
-      Chrono Trigger.spc
-      Chrono Trigger/
-        Chrono Trigger.wav
+      song.spc
+      song/
+        Song Title.wav
 
 Point Navidrome's music directory at `/mnt/chipfs` and it scans and streams everything as a normal music library.
 

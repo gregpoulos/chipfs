@@ -61,13 +61,13 @@ trap cleanup EXIT
 
 echo "── 1. Root directory ────────────────────────────────────────────────────────"
 
-for f in smb.nsf ducktales.nsfe kirby.gbs frogs-theme.spc; do
+for f in smb.nsf ducktales.nsfe seaside-village.gbs ode-to-joy.spc; do
     [[ -f "$MOUNT/$f" ]] \
         && pass "real file '$f' present" \
         || fail "real file '$f' missing"
 done
 
-for d in smb ducktales kirby frogs-theme; do
+for d in smb ducktales seaside-village ode-to-joy; do
     [[ -d "$MOUNT/$d" ]] \
         && pass "virtual dir '$d/' present" \
         || fail "virtual dir '$d/' missing"
@@ -80,12 +80,8 @@ echo "── 2. Track counts ─────────────────
 
 check_eq "smb track count"               "$(ls "$MOUNT/smb"       | wc -l | tr -d ' ')" "18"
 check_eq "ducktales track count (plst)"  "$(ls "$MOUNT/ducktales" | wc -l | tr -d ' ')" "16"
-check_eq "frogs-theme track count (SPC)" "$(ls "$MOUNT/frogs-theme" | wc -l | tr -d ' ')" "1"
-
-kirby_count=$(ls "$MOUNT/kirby" | wc -l | tr -d ' ')
-[[ "$kirby_count" -gt 0 ]] \
-    && pass "kirby has $kirby_count tracks" \
-    || fail "kirby has no tracks"
+check_eq "ode-to-joy track count (SPC)"  "$(ls "$MOUNT/ode-to-joy" | wc -l | tr -d ' ')" "1"
+check_eq "seaside-village track count (GBS)" "$(ls "$MOUNT/seaside-village" | wc -l | tr -d ' ')" "1"
 
 # ── 3. WAV metadata via ffprobe (lazy emulation — no render triggered) ─────────
 
@@ -120,8 +116,8 @@ check_wav_bytes "smb album tag (bytes)"    "$MOUNT/smb/Track_01.wav"        "Sup
 check_wav_bytes "smb artist tag (bytes)"   "$MOUNT/smb/Track_01.wav"        "Koji Kondo"
 duck_first=$(ls "$MOUNT/ducktales" | head -1)
 check_wav_bytes "ducktales album tag (bytes)" "$MOUNT/ducktales/$duck_first" "DuckTales"
-frog_first=$(ls "$MOUNT/frogs-theme" | head -1)
-check_wav_bytes "frogs-theme title (bytes)"   "$MOUNT/frogs-theme/$frog_first" "Frog"
+ode_first=$(ls "$MOUNT/ode-to-joy" | head -1)
+check_wav_bytes "ode-to-joy title (bytes)"    "$MOUNT/ode-to-joy/$ode_first"   "Ode"
 
 # Advisory: also validate via ffprobe so we know a real media tool can read tags.
 smb_probe=$(probe "$MOUNT/smb/Track_01.wav")
@@ -137,10 +133,10 @@ duck_probe=$(probe "$MOUNT/ducktales/$duck_first")
     && pass "ducktales album tag (ffprobe)" \
     || fail "ducktales album tag (ffprobe) — got: ${duck_probe:-<empty>}"
 
-frog_probe=$(probe "$MOUNT/frogs-theme/$frog_first")
-[[ "$frog_probe" == *"title="* ]] \
-    && pass "frogs-theme title tag (ffprobe)" \
-    || fail "frogs-theme title tag (ffprobe) — got: ${frog_probe:-<empty>}"
+ode_probe=$(probe "$MOUNT/ode-to-joy/$ode_first")
+[[ "$ode_probe" == *"title=Ode To Joy"* ]] \
+    && pass "ode-to-joy title tag (ffprobe)" \
+    || fail "ode-to-joy title tag (ffprobe) — got: ${ode_probe:-<empty>}"
 
 # ── 4. file size invariant (stat size == rendered byte count) ─────────────────
 #
@@ -160,8 +156,8 @@ size_check() {
         "$read_size" "$stat_size"
 }
 
-# Use frogs-theme (SPC) and smb track 1 to exercise both formats.
-size_check "$MOUNT/frogs-theme/$frog_first" "frogs-theme (SPC)"
+# Use ode-to-joy (SPC) and smb track 1 to exercise both formats.
+size_check "$MOUNT/ode-to-joy/$ode_first" "ode-to-joy (SPC)"
 size_check "$MOUNT/smb/Track_01.wav" "smb track 01 (NSF)"
 
 # ── 5. -allow_other flag ──────────────────────────────────────────────────────
