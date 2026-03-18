@@ -150,8 +150,14 @@ var _ fs.NodeOpener = (*RealFile)(nil)
 var _ fs.NodeGetattrer = (*RealFile)(nil)
 var _ fs.NodeReader = (*RealFile)(nil)
 
+// Open opens the underlying file and returns a realFileHandle that holds the
+// fd across all reads. go-fuse calls Release when the last open fd is closed.
 func (f *RealFile) Open(_ context.Context, _ uint32) (fs.FileHandle, uint32, syscall.Errno) {
-	return nil, gofuse.FOPEN_KEEP_CACHE, 0
+	file, err := os.Open(f.path)
+	if err != nil {
+		return nil, 0, syscall.ENOENT
+	}
+	return &realFileHandle{file: file}, gofuse.FOPEN_KEEP_CACHE, 0
 }
 
 func (f *RealFile) Getattr(_ context.Context, _ fs.FileHandle, out *gofuse.AttrOut) syscall.Errno {
@@ -164,6 +170,9 @@ func (f *RealFile) Getattr(_ context.Context, _ fs.FileHandle, out *gofuse.AttrO
 	return 0
 }
 
+// Read is a fallback for reads that arrive without an associated file handle
+// (e.g. direct NodeReader calls in tests). Normal FUSE reads go through
+// realFileHandle.Read once Open returns a handle.
 func (f *RealFile) Read(_ context.Context, _ fs.FileHandle, dest []byte, off int64) (gofuse.ReadResult, syscall.Errno) {
 	file, err := os.Open(f.path)
 	if err != nil {
@@ -175,6 +184,33 @@ func (f *RealFile) Read(_ context.Context, _ fs.FileHandle, dest []byte, off int
 		return nil, syscall.EIO
 	}
 	return gofuse.ReadResultData(dest[:n]), 0
+}
+
+// ---------------------------------------------------------------------------
+// realFileHandle
+// ---------------------------------------------------------------------------
+
+// realFileHandle holds an open *os.File across all FUSE read calls for a
+// single open(2) / release(2) lifecycle. go-fuse dispatches reads to
+// FileReader.Read and the final close to FileReleaser.Release.
+type realFileHandle struct {
+	file *os.File
+}
+
+var _ fs.FileReader = (*realFileHandle)(nil)
+var _ fs.FileReleaser = (*realFileHandle)(nil)
+
+func (h *realFileHandle) Read(_ context.Context, dest []byte, off int64) (gofuse.ReadResult, syscall.Errno) {
+	n, err := h.file.ReadAt(dest, off)
+	if err != nil && err != io.EOF {
+		return nil, syscall.EIO
+	}
+	return gofuse.ReadResultData(dest[:n]), 0
+}
+
+func (h *realFileHandle) Release(_ context.Context) syscall.Errno {
+	h.file.Close()
+	return 0
 }
 
 // ---------------------------------------------------------------------------

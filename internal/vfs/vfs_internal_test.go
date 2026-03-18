@@ -3,6 +3,7 @@ package vfs
 // Internal tests (package vfs, not vfs_test) so we can reach unexported types.
 
 import (
+	"os"
 	"sync"
 	"syscall"
 	"testing"
@@ -244,4 +245,59 @@ func TestTrackFile_EstimatedSizeMatchesRenderOutput(t *testing.T) {
 
 	assert.Equal(t, tf.estimatedSize, int64(len(wavBytes)),
 		"renderTrack output must be exactly EstimatedSize bytes")
+}
+
+// TestRealFileHandle_Read verifies that realFileHandle reads the correct bytes
+// at arbitrary offsets from the underlying file.
+func TestRealFileHandle_Read(t *testing.T) {
+	f, err := os.CreateTemp("", "chipfs-realfile-*.bin")
+	require.NoError(t, err)
+	defer os.Remove(f.Name())
+	content := []byte("hello, world!")
+	_, err = f.Write(content)
+	require.NoError(t, err)
+	f.Close()
+
+	of, err := os.Open(f.Name())
+	require.NoError(t, err)
+	h := &realFileHandle{file: of}
+	defer h.Release(nil)
+
+	// Read at offset 0.
+	dest := make([]byte, 5)
+	result, errno := h.Read(nil, dest, 0)
+	require.Equal(t, syscall.Errno(0), errno)
+	b, st := result.Bytes(dest)
+	require.Equal(t, 0, int(st))
+	assert.Equal(t, []byte("hello"), b)
+
+	// Read at non-zero offset.
+	dest2 := make([]byte, 6)
+	result2, errno2 := h.Read(nil, dest2, 7)
+	require.Equal(t, syscall.Errno(0), errno2)
+	b2, _ := result2.Bytes(dest2)
+	assert.Equal(t, []byte("world!"), b2)
+}
+
+// TestRealFileHandle_Release_ClosesFile verifies that Release closes the
+// underlying file descriptor so subsequent reads on it fail.
+func TestRealFileHandle_Release_ClosesFile(t *testing.T) {
+	f, err := os.CreateTemp("", "chipfs-realfile-*.bin")
+	require.NoError(t, err)
+	defer os.Remove(f.Name())
+	_, err = f.Write([]byte("data"))
+	require.NoError(t, err)
+	f.Close()
+
+	of, err := os.Open(f.Name())
+	require.NoError(t, err)
+	h := &realFileHandle{file: of}
+
+	errno := h.Release(nil)
+	assert.Equal(t, syscall.Errno(0), errno)
+
+	// After Release the fd is closed; ReadAt must fail.
+	dest := make([]byte, 4)
+	_, readErr := of.ReadAt(dest, 0)
+	assert.Error(t, readErr, "file must be closed after Release")
 }
