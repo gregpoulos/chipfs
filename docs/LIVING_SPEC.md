@@ -124,7 +124,7 @@ FUSE node implementations using `hanwen/go-fuse/v2`'s `NodeFS` API.
   (returns `FOPEN_DIRECT_IO` so all reads bypass the kernel page cache and reach
   our handler), `NodeGetattrer` (reports `wav.EstimatedSize()`), and `NodeReader`.
   `Read` implements **lazy emulation**: reads that start within the pre-built
-  WAV header (RIFF + `fmt ` + `id3 ` + `data` header) return those bytes plus
+  WAV header (RIFF + `fmt ` + `id3 ` + `LIST INFO` + `data` header) return those bytes plus
   zero-fill for any requested bytes beyond the header end — a full-sized response
   that avoids short reads while deferring emulation. Only a read whose offset
   reaches the PCM region triggers a full render; the result is cached and all
@@ -132,9 +132,9 @@ FUSE node implementations using `hanwen/go-fuse/v2`'s `NodeFS` API.
 
 ### `cmd/chipfs`
 
-Entry point. Parses `-source` and `-mountpoint` flags, creates a `vfs.Root`,
-mounts via `fs.Mount`, and blocks until SIGINT or SIGTERM (which triggers a clean
-unmount).
+Entry point. Parses `-source`, `-mountpoint`, `-allow_other`, `-default_length`,
+`-fade_length`, and `-cache_size_mb` flags, creates a `vfs.Root`, mounts via
+`fs.Mount`, and blocks until SIGINT or SIGTERM (which triggers a clean unmount).
 
 ### `cmd/render`
 
@@ -226,10 +226,12 @@ ID666 field.
 
 ## Current Implementation Status
 
-Phases 1–7 are complete. The filesystem mounts, serves virtual WAV files with
-correct metadata and exact file sizes, and passes the Docker smoke test (22/22
-checks). Phase 7 hardening items: singleflight render coalescing, LIST INFO
-RIFF chunk, RealFile FileHandle, and format parser split are all done.
+Phases 1–9 are complete. The filesystem mounts, serves virtual WAV files with
+correct metadata and exact file sizes, and passes the Docker smoke test. All
+hardening items (singleflight coalescing, LIST INFO RIFF chunk, RealFile
+FileHandle, format parser split), test coverage (corrupt-fixture EIO test,
+`-allow_other` smoke coverage, GitHub Actions CI), and mount options
+(`-default_length`, `-fade_length`, `-cache_size_mb`) are done.
 
-Remaining work: test coverage gaps (Phase 8), mount options (Phase 9), and
-deferred items. See [../TODO.md](../TODO.md).
+Deferred items (RSN support, FLAC output, N64/PSX formats, write support) remain
+out of scope for v1. See [../TODO.md](../TODO.md).
