@@ -24,6 +24,7 @@ jobs:
 
   smoke-test:
     name: Smoke test (Docker / Linux)
+    if: false  # requires a self-hosted runner with FUSE support; skipped in GitHub CI
     runs-on: [self-hosted, fuse]
     steps:
       - uses: actions/checkout@v4
