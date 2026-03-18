@@ -7,43 +7,11 @@ making classic video game music accessible to media servers like Navidrome.
 See [docs/LIVING_SPEC.md](docs/LIVING_SPEC.md) for architecture details and
 [TODO.md](TODO.md) for the current implementation phase.
 
-## Prerequisites
-
-```bash
-brew install go game-music-emu   # macOS
-# apt install golang libgme-dev  # Debian/Ubuntu (for Docker/Linux)
-```
-
-Optional (for FUSE mount testing on macOS only):
-```bash
-brew install --cask macfuse
-```
-
-## Setup
-
-```bash
-go mod download
-go test ./...   # all packages pass
-```
-
 ## TDD Workflow
 
-This project uses red/green TDD. The cycle is:
+Pick the next unchecked item in [TODO.md](TODO.md), write a failing test, implement the minimum to pass it, then run `/simplify`. Never write implementation code before a failing test exists.
 
-1. Pick the next unchecked item in [TODO.md](TODO.md)
-2. Run `go test ./internal/<package>/...` — confirm the test fails
-3. Implement the minimum code to make it pass
-4. Run `go test ./internal/<package>/...` — confirm it passes
-5. Run `/simplify` to review the implementation for quality and redundancy
-6. Move to the next item
-
-Never write implementation code before a failing test exists for it.
-
-Each format parser should have both synthetic-fixture tests (constructed in
-test code) and a real-file fixture test. Real files catch spec-vs-encoder
-divergence that synthetic fixtures miss — for example, real SPC files
-null-terminate duration fields while the spec implies space-padding, a
-difference that causes silent incorrect output rather than a test failure.
+Each format parser needs both synthetic-fixture tests and a real-file fixture test. Real files catch spec-vs-encoder divergence that synthetic fixtures miss — for example, real SPC files null-terminate duration fields while the spec implies space-padding.
 
 ## Architecture Quick Reference
 
@@ -58,15 +26,6 @@ difference that causes silent incorrect output rather than a test failure.
 | `internal/vfs` | FUSE nodes (Root, ChipDir, TrackFile) using hanwen/go-fuse |
 | `cmd/chipfs` | Entry point: flag parsing, FUSE mount |
 | `cmd/render` | Dev tool: renders a single track to a WAV file without a FUSE mount |
-
-## Running Tests
-
-```bash
-go test ./...                            # all unit tests
-go test ./internal/formats/...           # format parsers only (no CGO needed)
-go test -run TestCache ./internal/cache  # specific test
-go test -v ./internal/wav/...            # verbose output
-```
 
 ## Key Constraints
 
