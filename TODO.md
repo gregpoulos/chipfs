@@ -50,6 +50,7 @@ binary fixtures, and all subsequent packages depend on the metadata they produce
 - [x] Run smoke test: `docker build --target smoke-test -t chipfs-smoke . && docker run --rm --cap-add SYS_ADMIN --device /dev/fuse chipfs-smoke`
 - [ ] Navidrome: confirm scanner reads Artist/Album/Title correctly from virtual WAVs
 - [ ] Stress test with `fsstress` (Linux kernel tool)
+- [x] Mount option: `-allow_other` (allow other users/containers to access the mount)
 - [ ] Mount option: `-default_length` (seconds for tracks without duration metadata)
 - [ ] Mount option: `-fade_length`
 - [ ] Mount option: `-cache_size_mb`

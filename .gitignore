@@ -1,6 +1,6 @@
-# Binaries
-chipfs
-render
+# Binaries (anchored to root to avoid matching cmd/ subdirectories)
+/chipfs
+/render
 /dist/
 
 # Claude Code local settings (machine-specific tool permissions)
