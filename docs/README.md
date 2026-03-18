@@ -48,7 +48,7 @@ macOS support is best-effort. The primary deployment target is Linux.
 | `-mountpoint` | *(required)* | Empty directory to mount the virtual filesystem |
 
 Additional options (`-default_length`, `-fade_length`, `-cache_size_mb`) are
-planned for Phase 6 but not yet implemented.
+not yet implemented (deferred to a future release).
 
 ## Running Tests
 

@@ -91,9 +91,11 @@ CGO wrapper around `libgme` (Game Music Emu). Exposes `Open`, `TrackCount`,
 `TrackInfo`, `StartTrack`, `SetFade`, `Play`, `TrackEnded`, `Close`. An `Emu`
 wraps a `*C.Music_Emu` handle and is not safe for concurrent use.
 
-The CGO `#include` and linker flags are isolated to a `cgo.go` file (not yet
-created) so that the rest of the package can be read without CGO context. The
-libgme C API is stable and small (~20 functions); the wrapper is thin.
+The CGO preamble includes two version-gated C shims (`chipfs_set_fade`,
+`chipfs_fade_length`) that bridge the API difference between libgme 0.6.3
+(Debian bookworm) and 0.6.4 (Homebrew). See the `#if GME_VERSION >= 0x000604`
+block in `gme.go`. Always use `//` comments inside CGO preambles — `/* */`
+comments prematurely close the enclosing Go block comment.
 
 ### `internal/vfs`
 
@@ -108,13 +110,15 @@ FUSE node implementations using `hanwen/go-fuse/v2`'s `NodeFS` API.
 - **`ChipDir`:** Virtual directory for one chiptune file. `OnAdd` opens the file
   with libgme to enumerate tracks and populates `TrackFile` children. go-fuse
   handles `Readdir`/`Lookup` from the pre-populated tree.
-- **`TrackFile`:** Virtual WAV file for one track. `Getattr` reports
-  `wav.EstimatedSize()`. `Read` implements **lazy emulation**: the WAV header
-  bytes (RIFF + `fmt ` + `id3 ` chunks through the `data` chunk header) are
-  pre-built at construction via `wav.HeaderBytes` and served without emulation.
-  Only a read that reaches the PCM data region triggers a full render; the result
-  is cached and all subsequent reads (including backward seeks) are served from
-  the cache.
+- **`TrackFile`:** Virtual WAV file for one track. Implements `NodeOpener`
+  (returns `FOPEN_DIRECT_IO` so all reads bypass the kernel page cache and reach
+  our handler), `NodeGetattrer` (reports `wav.EstimatedSize()`), and `NodeReader`.
+  `Read` implements **lazy emulation**: reads that start within the pre-built
+  WAV header (RIFF + `fmt ` + `id3 ` + `data` header) return those bytes plus
+  zero-fill for any requested bytes beyond the header end — a full-sized response
+  that avoids short reads while deferring emulation. Only a read whose offset
+  reaches the PCM region triggers a full render; the result is cached and all
+  subsequent reads (including backward seeks) are served from the LRU cache.
 
 ### `cmd/chipfs`
 
@@ -166,8 +170,8 @@ internal/vfs.TrackFile.Read(ctx, dest, offset)
   │
   └─ cache MISS:
        │
-       ├─ offset+len ≤ len(header)?
-       │    YES → copy from pre-built header bytes, return   (no emulation)
+       ├─ offset < len(header)?
+       │    YES → return header bytes + zero-fill to len(dest)  (no emulation)
        │
        └─ NO (read reaches PCM region):
             │  os.ReadFile("Mega_Man_2.nsf")
@@ -181,10 +185,11 @@ internal/vfs.TrackFile.Read(ctx, dest, offset)
             └─ copy bytes from wavBytes[offset:offset+size], return
 ```
 
-The lazy emulation path is important for cold library scans: Navidrome reads
-the first few KB of each file to extract metadata. Those reads land entirely
-within the pre-built header and never trigger emulation, so scanning a library
-of 200 chiptune files costs no render time.
+The lazy emulation path is important for cold library scans: Navidrome (and
+tools like ffprobe) read the first few KB of each file to extract metadata.
+Those reads start within the pre-built header and are served as header bytes
+plus silence (zeros), never triggering emulation. Scanning a library of 200
+chiptune files costs no render time.
 
 ---
 
@@ -210,8 +215,12 @@ ID666 field.
 
 ## Current Implementation Status
 
-Phases 1–5 are complete: format parsers, WAV muxer, LRU cache, libgme CGO
-wrapper, and FUSE layer are fully implemented and tested. The filesystem can
-be mounted with `go run ./cmd/chipfs -source <dir> -mountpoint <dir>`.
+Phases 1–6 are complete. The filesystem mounts, serves virtual WAV files with
+correct metadata and exact file sizes, and passes the Docker smoke test (22/22
+checks: directory structure, track counts, WAV metadata via raw bytes and
+ffprobe, and the file-size invariant). The production Docker image and smoke
+test live in `Dockerfile` and `scripts/smoke-test.sh`.
 
-See [../TODO.md](../TODO.md) for the Phase 6 integration and hardening checklist.
+Remaining work (optional hardening): mount options (`-default_length`,
+`-fade_length`, `-cache_size_mb`), Navidrome end-to-end verification, fsstress
+stress testing, RSN support. See [../TODO.md](../TODO.md).
