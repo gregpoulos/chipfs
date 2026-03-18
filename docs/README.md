@@ -67,6 +67,23 @@ Integration tests (requires Linux or macOS with macFUSE):
 go test -tags integration ./...
 ```
 
+## Manual Integration Testing
+
+Before the FUSE layer is complete, you can verify the full render pipeline
+(parser → emulator → WAV muxer) using the render tool:
+
+```bash
+# Render track 1 of Super Mario Bros. to a WAV file
+go run ./cmd/render -file testdata/fixtures/smb.nsf -track 0 -out /tmp/smb_track01.wav
+
+# Render with explicit duration and fade
+go run ./cmd/render -file testdata/fixtures/smb.nsf -track 0 \
+  -duration 60000 -fade 3000 -out /tmp/smb_track01.wav
+```
+
+Open the output file in any media player (QuickTime, VLC, etc.) to verify the
+audio sounds correct and metadata (title, artist, album) is populated.
+
 ## Docker (Linux, for CI or NAS deployment)
 
 ```bash
