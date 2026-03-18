@@ -23,7 +23,7 @@ brew install --cask macfuse
 
 ```bash
 go mod download
-go test ./...   # implemented packages pass; stubs for unimplemented packages will fail
+go test ./...   # all packages pass
 ```
 
 ## TDD Workflow
@@ -57,6 +57,7 @@ difference that causes silent incorrect output rather than a test failure.
 | `internal/gme` | CGO wrapper around libgme: open files, enumerate tracks, render PCM samples |
 | `internal/vfs` | FUSE nodes (Root, ChipDir, TrackFile) using hanwen/go-fuse |
 | `cmd/chipfs` | Entry point: flag parsing, FUSE mount |
+| `cmd/render` | Dev tool: renders a single track to a WAV file without a FUSE mount |
 
 ## Running Tests
 

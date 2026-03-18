@@ -53,11 +53,13 @@ No package imports a package above it in this list.
 Pure Go binary parsers. Each reads a file's header bytes using `encoding/binary`
 and returns a `Header` struct. No I/O, no emulation, no CGO.
 
-**Important:** These parsers are used for tasks that don't require an open
-emulator — for example, scanning a directory to build the virtual filesystem
-tree before any track is played. For per-track metadata during playback
-(track count, title, duration), `gme.TrackInfo` is authoritative: it handles
-NSFe quirks such as `plst` (playlist remapping) that the Go parsers do not.
+**Current status:** These parsers are fully tested but not yet wired into the
+production path. `buildTrackList` currently uses `gme.Open` + `gme.TrackInfo`
+for all metadata — including the initial directory scan — because libgme handles
+NSFe quirks (e.g. `plst` playlist remapping) that the Go parsers do not yet
+implement. The intended split is: Go parsers for the fast directory scan at mount
+time (track count, global metadata), libgme only when a track is opened for
+rendering. See TODO.md ("Resolve the Go format parsers vs. libgme split").
 
 - **NSF:** 128-byte header. Provides global title, artist, copyright, and track
   count. No per-track metadata. NSFe (extended NSF) adds chunk-based extensions
