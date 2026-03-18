@@ -132,18 +132,19 @@ func TestParse_BinaryFormat_LargeDuration(t *testing.T) {
 	assert.Equal(t, 10_000, h.FadeDurationMs)
 }
 
-// TestParse_FrogsTheme tests against a real SPC file (Frog's Theme, Chrono Trigger)
-// to catch assumptions that synthetic fixtures might not exercise.
-func TestParse_FrogsTheme(t *testing.T) {
-	data, err := os.ReadFile("../../../testdata/fixtures/frogs-theme.spc")
-	require.NoError(t, err, "testdata/fixtures/frogs-theme.spc must exist")
+// TestParse_OdeToJoy tests against a real SPC file (Ode To Joy, public domain,
+// exported from the Terrific Audio Driver examples under zlib/MIT license) to
+// catch assumptions that synthetic fixtures might not exercise.
+func TestParse_OdeToJoy(t *testing.T) {
+	data, err := os.ReadFile("../../../testdata/fixtures/ode-to-joy.spc")
+	require.NoError(t, err, "testdata/fixtures/ode-to-joy.spc must exist")
 
 	h, err := spc.Parse(data)
 	require.NoError(t, err)
 
-	assert.Equal(t, "Frog's Theme", h.SongTitle)
-	assert.Equal(t, "Chrono Trigger", h.GameTitle)
-	assert.Equal(t, "Yasunori Mitsuda", h.Artist)
-	assert.Equal(t, 61_000, h.PlayDurationMs)
-	assert.Equal(t, 8_000, h.FadeDurationMs)
+	assert.Equal(t, "Ode To Joy (G Major)", h.SongTitle)
+	assert.Equal(t, "Terrific Audio Driver Examples", h.GameTitle)
+	assert.Equal(t, "Ludwig van Beethoven", h.Artist)
+	assert.Equal(t, 14_000, h.PlayDurationMs)
+	assert.Equal(t, 0, h.FadeDurationMs)
 }
