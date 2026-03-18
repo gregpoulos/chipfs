@@ -33,6 +33,7 @@ package vfs
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -144,11 +145,16 @@ func (f *RealFile) Getattr(_ context.Context, _ fs.FileHandle, out *gofuse.AttrO
 }
 
 func (f *RealFile) Read(_ context.Context, _ fs.FileHandle, dest []byte, off int64) (gofuse.ReadResult, syscall.Errno) {
-	data, err := os.ReadFile(f.path)
+	file, err := os.Open(f.path)
 	if err != nil {
 		return nil, syscall.EIO
 	}
-	return gofuse.ReadResultData(sliceAt(data, dest, off)), 0
+	defer file.Close()
+	n, err := file.ReadAt(dest, off)
+	if err != nil && err != io.EOF {
+		return nil, syscall.EIO
+	}
+	return gofuse.ReadResultData(dest[:n]), 0
 }
 
 // ---------------------------------------------------------------------------
@@ -334,7 +340,12 @@ func (f *TrackFile) Getattr(_ context.Context, _ fs.FileHandle, out *gofuse.Attr
 // Read implements lazy emulation. Reads that fall entirely within the pre-built
 // WAV header are served without touching the emulator. Only reads that reach
 // the PCM data region trigger a full render.
-func (f *TrackFile) Read(_ context.Context, _ fs.FileHandle, dest []byte, off int64) (gofuse.ReadResult, syscall.Errno) {
+func (f *TrackFile) Read(_ context.Context, _ fs.FileHandle, dest []byte, off int64) (result gofuse.ReadResult, errno syscall.Errno) {
+	defer func() {
+		if r := recover(); r != nil {
+			result, errno = nil, syscall.EIO
+		}
+	}()
 	// Cache hit: full WAV already rendered.
 	if f.cache != nil {
 		if data, ok := f.cache.Get(f.sourcePath, f.trackIdx); ok {
