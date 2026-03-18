@@ -55,6 +55,13 @@ binary fixtures, and all subsequent packages depend on the metadata they produce
 - [ ] Mount option: `-cache_size_mb`
 - [ ] RSN support (RAR containing multiple SPCs) — optional, via libarchive
 
+## Phase 7: Portfolio Hardening
+
+- [ ] CI — GitHub Actions: `go test -race ./...` on macOS + Docker smoke test on ubuntu-latest; add status badge to README
+- [ ] `internal/vfs` — Add `defer/recover` in `TrackFile.Read` to catch panics from libgme on corrupt files and return `syscall.EIO` instead of crashing chipfs
+- [ ] `internal/vfs` — Fix `RealFile.Read`: replace `os.ReadFile` with `os.Open` + `ReadAt` so a partial read doesn't allocate the whole file
+- [ ] `internal/vfs` — Resolve the Go format parsers vs. libgme split: either wire `internal/formats/*` into `buildTrackList` as the initial directory scan (their original purpose), or document clearly why libgme is used for everything and what the Go parsers are for
+
 ## Deferred / Out of Scope for v1
 
 - FLAC output (WAV is sufficient for Navidrome)
