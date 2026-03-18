@@ -48,7 +48,7 @@ binary fixtures, and all subsequent packages depend on the metadata they produce
 - [x] Dockerfile — multi-stage build (builder + runtime + smoke-test targets)
 - [x] `scripts/smoke-test.sh` — verifies virtual dir structure, track counts, WAV metadata, and file size invariant inside Docker
 - [x] Run smoke test: `docker build --target smoke-test -t chipfs-smoke . && docker run --rm --cap-add SYS_ADMIN --device /dev/fuse chipfs-smoke`
-- [ ] Navidrome: confirm scanner reads Artist/Album/Title correctly from virtual WAVs
+- [x] Navidrome: confirm scanner reads Artist/Album/Title correctly from virtual WAVs
 - [ ] Stress test with `fsstress` (Linux kernel tool)
 - [x] Mount option: `-allow_other` (allow other users/containers to access the mount)
 - [ ] Mount option: `-default_length` (seconds for tracks without duration metadata)
