@@ -88,6 +88,61 @@ func Encode(samples []int16, opts Options) ([]byte, error) {
 	return buf, nil
 }
 
+// HeaderBytes returns the WAV file prefix up to (and including) the 8-byte
+// "data" chunk header, but not including any PCM samples. Its length equals
+// EstimatedSize(durationMs, opts) minus the PCM byte count.
+//
+// This prefix contains the RIFF header, fmt chunk, and id3 chunk — everything
+// Navidrome needs to read track metadata. TrackFile.Read serves these bytes
+// directly without triggering emulation when a read falls entirely before the
+// PCM region.
+func HeaderBytes(durationMs int, opts Options) []byte {
+	id3Data := buildID3v2(opts.Metadata)
+	id3PaddedSize := paddedSize(len(id3Data))
+	pcmBytes := (durationMs * opts.SampleRate / 1000) * opts.Channels * 2
+	totalSize := 12 + 24 + 8 + id3PaddedSize + 8 + pcmBytes
+
+	headerLen := 12 + 24 + 8 + id3PaddedSize + 8
+	buf := make([]byte, headerLen)
+	pos := 0
+
+	// RIFF header
+	pos += copy(buf[pos:], "RIFF")
+	binary.LittleEndian.PutUint32(buf[pos:], uint32(totalSize-8))
+	pos += 4
+	pos += copy(buf[pos:], "WAVE")
+
+	// fmt chunk (always 16-byte PCM)
+	pos += copy(buf[pos:], "fmt ")
+	binary.LittleEndian.PutUint32(buf[pos:], 16)
+	pos += 4
+	binary.LittleEndian.PutUint16(buf[pos:], 1) // PCM
+	pos += 2
+	binary.LittleEndian.PutUint16(buf[pos:], uint16(opts.Channels))
+	pos += 2
+	binary.LittleEndian.PutUint32(buf[pos:], uint32(opts.SampleRate))
+	pos += 4
+	binary.LittleEndian.PutUint32(buf[pos:], uint32(opts.SampleRate*opts.Channels*2))
+	pos += 4
+	binary.LittleEndian.PutUint16(buf[pos:], uint16(opts.Channels*2))
+	pos += 2
+	binary.LittleEndian.PutUint16(buf[pos:], 16) // bits per sample
+	pos += 2
+
+	// id3 chunk
+	pos += copy(buf[pos:], "id3 ")
+	binary.LittleEndian.PutUint32(buf[pos:], uint32(len(id3Data)))
+	pos += 4
+	pos += copy(buf[pos:], id3Data)
+	pos += id3PaddedSize - len(id3Data)
+
+	// data chunk header (size field only, no PCM bytes)
+	pos += copy(buf[pos:], "data")
+	binary.LittleEndian.PutUint32(buf[pos:], uint32(pcmBytes))
+
+	return buf
+}
+
 // EstimatedSize returns the exact byte length that Encode will produce for a
 // track of the given duration. This is used to populate the FUSE getattr file
 // size before emulation begins, allowing media servers to allocate buffers

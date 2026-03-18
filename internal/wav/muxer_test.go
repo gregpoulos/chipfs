@@ -185,3 +185,36 @@ func TestEstimatedSize_MatchesActualEncodeOutput(t *testing.T) {
 	assert.Equal(t, int64(len(actual)), estimated,
 		"EstimatedSize must exactly predict the output of Encode for the same duration")
 }
+
+func TestHeaderBytes_IsExactPrefixOfEncode(t *testing.T) {
+	// HeaderBytes must produce bytes that are byte-for-byte identical to the
+	// same prefix in Encode. TrackFile.Read serves HeaderBytes for header-only
+	// reads; if they diverge, metadata readers see different data than PCM readers.
+	const durationMs = 5_000
+	opts := wav.Options{
+		SampleRate: 44100,
+		Channels:   2,
+		Metadata: wav.Metadata{
+			Title:  "Flash Man",
+			Artist: "Takashi Tateishi",
+			Album:  "Mega Man 2",
+			Track:  3,
+		},
+	}
+
+	sampleCount := (durationMs * opts.SampleRate / 1000) * opts.Channels
+	samples := make([]int16, sampleCount)
+	full, err := wav.Encode(samples, opts)
+	require.NoError(t, err)
+
+	header := wav.HeaderBytes(durationMs, opts)
+
+	// Header must be a proper prefix of the full WAV.
+	require.Less(t, len(header), len(full), "header must be shorter than full WAV")
+	assert.Equal(t, full[:len(header)], header,
+		"HeaderBytes must be byte-for-byte identical to the corresponding prefix of Encode")
+
+	// The byte immediately after the header is the first PCM sample byte.
+	assert.Equal(t, int64(len(header)), wav.EstimatedSize(durationMs, opts)-int64(sampleCount*2),
+		"header length must equal EstimatedSize minus PCM bytes")
+}

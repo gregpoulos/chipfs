@@ -46,9 +46,9 @@ macOS support is best-effort. The primary deployment target is Linux.
 |---|---|---|
 | `-source` | *(required)* | Directory containing your chiptune files |
 | `-mountpoint` | *(required)* | Empty directory to mount the virtual filesystem |
-| `-default_length` | `180` | Track duration in seconds for files with no metadata |
-| `-fade_length` | `8` | Fade-out duration in seconds |
-| `-cache_size_mb` | `256` | Maximum in-memory WAV cache size |
+
+Additional options (`-default_length`, `-fade_length`, `-cache_size_mb`) are
+planned for Phase 6 but not yet implemented.
 
 ## Running Tests
 
@@ -69,8 +69,8 @@ go test -tags integration ./...
 
 ## Manual Integration Testing
 
-Before the FUSE layer is complete, you can verify the full render pipeline
-(parser → emulator → WAV muxer) using the render tool:
+To verify the full render pipeline (parser → emulator → WAV muxer) without a
+FUSE mount, use the render tool:
 
 ```bash
 # Render track 1 of Super Mario Bros. to a WAV file

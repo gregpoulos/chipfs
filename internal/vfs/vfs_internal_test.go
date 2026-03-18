@@ -1,0 +1,110 @@
+package vfs
+
+// Internal tests (package vfs, not vfs_test) so we can reach unexported types.
+
+import (
+	"testing"
+
+	"github.com/gregpoulos/chipfs/internal/wav"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestBuildTrackList_SMB(t *testing.T) {
+	tracks := buildTrackList("../../testdata/fixtures/smb.nsf")
+	require.NotNil(t, tracks, "smb.nsf must be recognised as a chiptune file")
+
+	assert.Equal(t, 18, len(tracks))
+
+	// Plain NSF has no per-track titles → synthesised filenames.
+	assert.Equal(t, "Track_01.wav", tracks[0].filename)
+	assert.Equal(t, "Track_18.wav", tracks[17].filename)
+
+	// libgme's default play_length for plain NSF is 150 000 ms.
+	assert.Equal(t, 150_000, tracks[0].playMs)
+	assert.Equal(t, 8_000, tracks[0].fadeMs)
+
+	// Album should be populated from ti.Game.
+	assert.Equal(t, "Super Mario Bros.", tracks[0].opts.Metadata.Album)
+	assert.Equal(t, "Koji Kondo", tracks[0].opts.Metadata.Artist)
+}
+
+func TestBuildTrackList_DuckTales(t *testing.T) {
+	tracks := buildTrackList("../../testdata/fixtures/ducktales.nsfe")
+	require.NotNil(t, tracks, "ducktales.nsfe must be recognised as a chiptune file")
+
+	// plst remapping: libgme reports 16 playlist entries.
+	assert.Equal(t, 16, len(tracks))
+
+	// First track should have a real title from tlbl (not synthesised).
+	assert.NotEqual(t, "Track_01.wav", tracks[0].filename,
+		"NSFe per-track titles should produce named filenames")
+}
+
+func TestBuildTrackList_UnknownExtension(t *testing.T) {
+	assert.Nil(t, buildTrackList("/etc/hosts"),
+		"non-chiptune file must return nil")
+}
+
+func TestSanitizeFilename_ReplacesSlashAndColon(t *testing.T) {
+	assert.Equal(t, "A_B_C", sanitizeFilename("A/B:C"))
+	assert.Equal(t, "no change", sanitizeFilename("no change"))
+}
+
+func TestTrackFile_HeaderOnlyRead_NoEmulation(t *testing.T) {
+	// Build a TrackFile with a known header but a source path that cannot be
+	// opened by the emulator. If Read correctly serves from the pre-built
+	// header without calling renderTrack, the test passes even though
+	// rendering would fail.
+	opts := wav.Options{
+		SampleRate: 44100,
+		Channels:   2,
+		Metadata:   wav.Metadata{Title: "Test Track", Album: "Test Game"},
+	}
+	const totalMs = 10_000
+	header := wav.HeaderBytes(totalMs, opts)
+	tf := &TrackFile{
+		sourcePath:    "/nonexistent/path/that/cannot/be/opened.nsf",
+		trackIdx:      0,
+		playMs:        totalMs - 8_000,
+		fadeMs:        8_000,
+		opts:          opts,
+		header:        header,
+		estimatedSize: wav.EstimatedSize(totalMs, opts),
+		cache:         nil, // no cache — forces the header-only path
+	}
+
+	dest := make([]byte, 12) // first 12 bytes = RIFF chunk header
+	result, errno := tf.Read(nil, nil, dest, 0)
+	require.Equal(t, 0, int(errno))
+	require.NotNil(t, result)
+
+	got, st := result.Bytes(dest)
+	require.Equal(t, 0, int(st))
+	assert.Equal(t, header[:12], got, "first 12 bytes must match RIFF header")
+}
+
+func TestTrackFile_EstimatedSizeMatchesRenderOutput(t *testing.T) {
+	// Full pipeline test using a real fixture: rendered WAV must have exactly
+	// EstimatedSize bytes. This verifies the sample-trimming in renderTrack.
+	tracks := buildTrackList("../../testdata/fixtures/smb.nsf")
+	require.NotNil(t, tracks)
+
+	// Use track 0; it's short enough with a quick fade for a unit test.
+	t0 := tracks[0]
+	tf := &TrackFile{
+		sourcePath:    "../../testdata/fixtures/smb.nsf",
+		trackIdx:      t0.trackIdx,
+		playMs:        t0.playMs,
+		fadeMs:        t0.fadeMs,
+		opts:          t0.opts,
+		header:        wav.HeaderBytes(t0.totalMs(), t0.opts),
+		estimatedSize: wav.EstimatedSize(t0.totalMs(), t0.opts),
+	}
+
+	wavBytes, err := tf.renderTrack()
+	require.NoError(t, err)
+
+	assert.Equal(t, tf.estimatedSize, int64(len(wavBytes)),
+		"renderTrack output must be exactly EstimatedSize bytes")
+}

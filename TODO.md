@@ -34,16 +34,14 @@ binary fixtures, and all subsequent packages depend on the metadata they produce
 - [x] `internal/gme` — `StartTrack`, `SetFade`, `Play`, `TrackEnded`, `Close`
 - [x] Add real `.nsf` fixture to `testdata/fixtures/` and unskip gme integration tests
 
-## Phase 5: FUSE Layer (current)
+## Phase 5: FUSE Layer ✓
 
-- [ ] `internal/vfs` — `Root`: scan source dir, expose real files + virtual siblings
-- [ ] `internal/vfs` — `ChipDir`: `Readdir` (synthesize track filenames), `Lookup`
-- [ ] `internal/vfs` — `TrackFile`: `Getattr` (report `EstimatedSize`), `Read` (serve from cache)
-- [ ] `internal/vfs` — `TrackFile.Read`: serve WAV header + ID3 chunk without emulation;
-      only start the emulator if the read offset reaches the `data` chunk. This prevents
-      Navidrome's metadata scanner from triggering full track renders for 50+ files
-      simultaneously, which would spike RAM by hundreds of MB on a cold library scan.
-- [ ] `cmd/chipfs` — Wire everything together: parse flags, call `fuse.Mount`
+- [x] `internal/vfs` — `Root`: scan source dir, expose real files + virtual siblings
+- [x] `internal/vfs` — `ChipDir`: `OnAdd` populates TrackFile children; `Readdir`/`Lookup` handled by go-fuse tree
+- [x] `internal/vfs` — `TrackFile`: `Getattr` (report `EstimatedSize`), `Read` (serve from cache)
+- [x] `internal/vfs` — `TrackFile.Read`: serve WAV header + ID3 chunk without emulation;
+      only start the emulator if the read offset reaches the `data` chunk.
+- [x] `cmd/chipfs` — Wire everything together: parse flags, call `fuse.Mount`, SIGINT/SIGTERM handling
 
 ## Phase 6: Integration & Hardening
 

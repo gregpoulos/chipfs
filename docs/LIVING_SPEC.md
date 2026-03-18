@@ -99,18 +99,28 @@ libgme C API is stable and small (~20 functions); the wrapper is thin.
 
 FUSE node implementations using `hanwen/go-fuse/v2`'s `NodeFS` API.
 
-- **`Root`:** Top-level node. Scans the source directory; for each recognized
-  chiptune file, exposes the real file (passthrough) and a virtual sibling `ChipDir`.
-- **`ChipDir`:** Virtual directory for one chiptune file. `Readdir` synthesizes
-  track filenames from metadata; `Lookup` returns a `TrackFile` node.
+- **`Root`:** Top-level node. `OnAdd` scans the source directory at mount time;
+  for each recognized chiptune file it adds a `RealFile` passthrough node and a
+  virtual sibling `ChipDir`. go-fuse handles `Readdir`/`Lookup` automatically
+  from the pre-populated inode tree.
+- **`RealFile`:** Passthrough read of the original chiptune file on disk
+  (`Getattr` + `Read` delegate to `os.Stat`/`os.ReadFile`).
+- **`ChipDir`:** Virtual directory for one chiptune file. `OnAdd` opens the file
+  with libgme to enumerate tracks and populates `TrackFile` children. go-fuse
+  handles `Readdir`/`Lookup` from the pre-populated tree.
 - **`TrackFile`:** Virtual WAV file for one track. `Getattr` reports
-  `wav.EstimatedSize()`; `Read` serves bytes from the cache, triggering emulation
-  if the cache is cold.
+  `wav.EstimatedSize()`. `Read` implements **lazy emulation**: the WAV header
+  bytes (RIFF + `fmt ` + `id3 ` chunks through the `data` chunk header) are
+  pre-built at construction via `wav.HeaderBytes` and served without emulation.
+  Only a read that reaches the PCM data region triggers a full render; the result
+  is cached and all subsequent reads (including backward seeks) are served from
+  the cache.
 
 ### `cmd/chipfs`
 
-Entry point. Parses `-source` and `-mountpoint` flags and any mount options, then
-calls `fuse.Mount`. Not yet implemented beyond flag parsing.
+Entry point. Parses `-source` and `-mountpoint` flags, creates a `vfs.Root`,
+mounts via `fs.Mount`, and blocks until SIGINT or SIGTERM (which triggers a clean
+unmount).
 
 ### `cmd/render`
 
@@ -151,21 +161,30 @@ Linux kernel FUSE module
   │  dispatches Read op to ChipFS process
   ▼
 internal/vfs.TrackFile.Read(ctx, dest, offset)
-  │  check cache.Get("Mega_Man_2.nsf", trackIndex=0)
+  │
   ├─ cache HIT → copy bytes from cache buffer, return
+  │
   └─ cache MISS:
-       │  gme.Open(nsfBytes, sampleRate=44100)
-       │  emu.StartTrack(0)
-       │  emu.SetFade(durationMs)
-       │  loop: emu.Play(chunk) → append to buffer
-       │  wav.Encode(allSamples, opts) → wavBytes
-       │  cache.Set("Mega_Man_2.nsf", 0, wavBytes)
-       └─ copy bytes from wavBytes[offset:offset+size], return
+       │
+       ├─ offset+len ≤ len(header)?
+       │    YES → copy from pre-built header bytes, return   (no emulation)
+       │
+       └─ NO (read reaches PCM region):
+            │  os.ReadFile("Mega_Man_2.nsf")
+            │  gme.Open(nsfBytes, sampleRate=44100)
+            │  emu.StartTrack(0)
+            │  emu.SetFade(playMs, fadeMs)
+            │  loop: emu.Play(chunk) → append to buffer
+            │  trim samples to exact expected count
+            │  wav.Encode(allSamples, opts) → wavBytes
+            │  cache.Set("Mega_Man_2.nsf", 0, wavBytes)
+            └─ copy bytes from wavBytes[offset:offset+size], return
 ```
 
-The emulation loop runs in a goroutine. Concurrent readers of the same track
-share one emulation run via a `sync.Cond`-based wait on buffer growth (not yet
-implemented; current stub blocks until full render completes).
+The lazy emulation path is important for cold library scans: Navidrome reads
+the first few KB of each file to extract metadata. Those reads land entirely
+within the pre-built header and never trigger emulation, so scanning a library
+of 200 chiptune files costs no render time.
 
 ---
 
@@ -191,8 +210,8 @@ ID666 field.
 
 ## Current Implementation Status
 
-Phases 1–3 are complete: format parsers, WAV muxer, and LRU track cache are
-fully implemented and tested. See [../TODO.md](../TODO.md) for the checklist.
+Phases 1–5 are complete: format parsers, WAV muxer, LRU cache, libgme CGO
+wrapper, and FUSE layer are fully implemented and tested. The filesystem can
+be mounted with `go run ./cmd/chipfs -source <dir> -mountpoint <dir>`.
 
-The next implementation target is `internal/gme` — the CGO wrapper around
-libgme. This is the first package that requires CGO and an external library.
+See [../TODO.md](../TODO.md) for the Phase 6 integration and hardening checklist.
