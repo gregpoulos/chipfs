@@ -56,17 +56,15 @@ This file tracks the current state of implementation. Update it as phases comple
 - [x] `internal/vfs` — Format parser split: `buildTrackList` uses pure-Go parsers for
       mount-time scan; libgme reserved for rendering only
 
-## Phase 8: Test Coverage & CI
+## Phase 8: Test Coverage & CI ✓
 
-These don't change runtime behaviour but close gaps in the safety net.
-
-- [ ] `internal/vfs` — Replace the artificial `estimatedSize=-1` panic trigger in
-      `TestTrackFile_Read_PanicReturnsEIO` with a corrupt NSF fixture so the test exercises
-      the real failure path (libgme panicking on bad input)
-- [ ] Smoke test — add a `-allow_other` invocation path so the flag has integration-level
-      coverage beyond the unit test for flag parsing
-- [ ] CI — GitHub Actions: `go test -race ./...` on macOS + Docker smoke test on ubuntu-latest;
-      add status badge to README
+- [x] `internal/vfs` — `TestTrackFile_Read_RenderErrorReturnsEIO`: creates a corrupt
+      NSF (valid magic, truncated body) in a temp dir; reads at PCM offset; verifies
+      that gme.Open failure propagates as EIO
+- [x] Smoke test — section 5 remounts with `-allow_other` and verifies the virtual
+      directory is accessible
+- [x] CI — `.github/workflows/ci.yml`: `go test -race ./...` on macos-latest +
+      Docker smoke test on ubuntu-latest; status badge added to README
 
 ## Phase 9: Mount Options
 

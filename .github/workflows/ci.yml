@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Unit tests (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install libgme
+        run: brew install game-music-emu
+
+      - name: Run tests with race detector
+        run: go test -race ./...
+
+  smoke-test:
+    name: Smoke test (Docker / Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable FUSE
+        run: |
+          sudo apt-get install -y fuse3
+          sudo modprobe fuse
+
+      - name: Build smoke-test image
+        run: docker build --target smoke-test -t chipfs-smoke .
+
+      - name: Run smoke test
+        run: docker run --rm --cap-add SYS_ADMIN --device /dev/fuse chipfs-smoke

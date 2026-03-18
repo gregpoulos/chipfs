@@ -164,6 +164,35 @@ size_check() {
 size_check "$MOUNT/frogs-theme/$frog_first" "frogs-theme (SPC)"
 size_check "$MOUNT/smb/Track_01.wav" "smb track 01 (NSF)"
 
+# ── 5. -allow_other flag ──────────────────────────────────────────────────────
+#
+# Unmount the current instance and remount with -allow_other to verify the
+# flag is accepted and the mount is functional. The runtime image already has
+# user_allow_other enabled in /etc/fuse.conf (set during Docker build).
+
+echo ""
+echo "── 5. -allow_other flag ─────────────────────────────────────────────────────"
+
+fusermount3 -u "$MOUNT" 2>/dev/null || umount "$MOUNT" 2>/dev/null || true
+wait "$CHIPFS_PID" 2>/dev/null || true
+
+chipfs -source "$SOURCE" -mountpoint "$MOUNT" -allow_other &
+CHIPFS_PID=$!
+
+for i in $(seq 1 25); do
+    mountpoint -q "$MOUNT" 2>/dev/null && break
+    sleep 0.2
+done
+
+if ! mountpoint -q "$MOUNT" 2>/dev/null; then
+    fail "-allow_other: chipfs did not mount within 5 seconds"
+else
+    pass "-allow_other: mount succeeded"
+    [[ -d "$MOUNT/smb" ]] \
+        && pass "-allow_other: virtual directory accessible" \
+        || fail "-allow_other: virtual directory not accessible"
+fi
+
 # ── summary ───────────────────────────────────────────────────────────────────
 
 echo ""

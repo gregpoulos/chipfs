@@ -4,6 +4,7 @@ package vfs
 
 import (
 	"os"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"testing"
@@ -73,24 +74,40 @@ func TestClampMs(t *testing.T) {
 	assert.Equal(t, 20*60*1000, clampMs(99*60*1000, 180_000, 20*60*1000))
 }
 
-// TestTrackFile_Read_PanicReturnsEIO verifies that a panic inside Read is
-// recovered and returns EIO rather than crashing the process.
-func TestTrackFile_Read_PanicReturnsEIO(t *testing.T) {
+// TestTrackFile_Read_RenderErrorReturnsEIO verifies that a render failure
+// (libgme rejecting a corrupt source file) returns EIO to the FUSE client
+// rather than crashing the process. The corrupt file has valid NSF magic but
+// is too short for libgme to parse, so gme.Open returns an error.
+func TestTrackFile_Read_RenderErrorReturnsEIO(t *testing.T) {
+	// Build a minimal corrupt NSF: valid magic bytes + zeros, total 55 bytes.
+	// This is well short of the 128-byte header libgme requires, so gme.Open
+	// will return an error rather than an emulator handle.
+	corrupt := make([]byte, 55)
+	copy(corrupt, "NESM\x1a") // NSF magic; rest stays zero
+
+	path := filepath.Join(t.TempDir(), "corrupt.nsf")
+	require.NoError(t, os.WriteFile(path, corrupt, 0600))
+
 	opts := wav.Options{SampleRate: 44100, Channels: 2}
-	header := wav.HeaderBytes(1000, opts)
+	const totalMs = 1000
+	header := wav.HeaderBytes(totalMs, opts)
 	tf := &TrackFile{
-		sourcePath:    "test.nsf",
-		trackIdx:      3,
+		sourcePath:    path,
+		trackIdx:      0,
+		playMs:        900,
+		fadeMs:        100,
+		opts:          opts,
 		header:        header,
-		estimatedSize: -1, // make([]byte, end-off) panics when end clamps to -1
+		estimatedSize: wav.EstimatedSize(totalMs, opts),
 		cache:         nil,
 	}
 
+	// Read at PCM offset to trigger renderTrack with the corrupt source.
 	dest := make([]byte, 65536)
-	result, errno := tf.Read(nil, nil, dest, 0)
+	result, errno := tf.Read(nil, nil, dest, int64(len(header)))
 
-	assert.Equal(t, syscall.EIO, errno, "panic must return EIO")
-	assert.Nil(t, result, "panic must return nil result")
+	assert.Equal(t, syscall.EIO, errno, "render error must return EIO")
+	assert.Nil(t, result, "render error must return nil result")
 }
 
 func TestBuildTrackList_SMB(t *testing.T) {

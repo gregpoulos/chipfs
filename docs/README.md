@@ -1,5 +1,7 @@
 # ChipFS
 
+[![CI](https://github.com/gregpoulos/chipfs/actions/workflows/ci.yml/badge.svg)](https://github.com/gregpoulos/chipfs/actions/workflows/ci.yml)
+
 A read-only FUSE filesystem that presents chiptune files (NES `.nsf`, Game Boy
 `.gbs`, SNES `.spc`) as folders of playable WAV tracks, enabling media servers
 like Navidrome to scan and stream classic video game music.
