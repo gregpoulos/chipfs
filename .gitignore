@@ -1,6 +1,10 @@
 # Binaries
 chipfs
+render
 /dist/
+
+# Claude Code local settings (machine-specific tool permissions)
+.claude/
 
 # Go build cache and test artifacts
 *.test
