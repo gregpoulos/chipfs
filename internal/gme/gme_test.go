@@ -54,6 +54,8 @@ func TestTrackInfo_SMB(t *testing.T) {
 	assert.Equal(t, "1985 Nintendo", info.Copyright)
 	// play_length for plain NSF (no per-track duration) defaults to 150000ms (2.5 min).
 	assert.Greater(t, info.PlayMs, 0)
+	// fade_length is -1 when not specified by the file.
+	assert.Equal(t, -1, info.FadeMs)
 }
 
 func TestPlay_ProducesNonZeroSamples(t *testing.T) {

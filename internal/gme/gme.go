@@ -45,6 +45,7 @@ type TrackInfo struct {
 	System    string
 	Comment   string
 	PlayMs    int // play_length from libgme: intro+loop×2, or 150000 if unknown
+	FadeMs    int // fade_length from file metadata; -1 if not specified
 	IntroMs   int // length of intro before first loop (-1 if unknown)
 	LoopMs    int // length of one loop (-1 if unknown)
 }
@@ -94,6 +95,7 @@ func (e *Emu) TrackInfo(index int) (TrackInfo, error) {
 		System:    C.GoString(info.system),
 		Comment:   C.GoString(info.comment),
 		PlayMs:    int(info.play_length),
+		FadeMs:    int(info.fade_length),
 		IntroMs:   int(info.intro_length),
 		LoopMs:    int(info.loop_length),
 	}, nil
