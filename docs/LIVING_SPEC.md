@@ -75,8 +75,10 @@ Pure Go WAV muxer. Accepts `[]int16` PCM samples and `Options` (sample rate,
 channels, metadata); returns a complete WAV `[]byte`.
 
 The output format is: RIFF header → `fmt ` chunk → `id3 ` chunk (ID3v2 tag) →
-`data` chunk (PCM bytes). The `id3 ` chunk is a standard RIFF extension that
-taglib-based parsers (including Navidrome) read for Artist/Album/Title.
+`LIST INFO` chunk (INAM/IART/IPRD subchunks) → `data` chunk (PCM bytes). The
+`id3 ` chunk is read by taglib-based parsers (including Navidrome); the `LIST INFO`
+chunk provides the same metadata to older WAV parsers (Windows Media Player,
+Winamp) that do not read `id3 `. Both coexist in every output file.
 
 `EstimatedSize(durationMs, opts)` returns the exact byte count for a track of the
 given duration. This value is reported to FUSE in `getattr` before emulation begins.
@@ -109,10 +111,14 @@ FUSE node implementations using `hanwen/go-fuse/v2`'s `NodeFS` API.
   are exposed — symlinks, devices, and other special files are silently skipped
   to prevent a symlink from escaping the source directory boundary. go-fuse
   handles `Readdir`/`Lookup` automatically from the pre-populated tree.
-- **`RealFile`:** Passthrough read of the original chiptune file on disk
-  (`Getattr` + `Read` delegate to `os.Stat`/`os.ReadFile`).
-- **`ChipDir`:** Virtual directory for one chiptune file. `OnAdd` opens the file
-  with libgme to enumerate tracks and populates `TrackFile` children. go-fuse
+- **`RealFile`:** Passthrough read of the original chiptune file on disk.
+  `Open` opens an `*os.File` and returns a `realFileHandle` that holds it for
+  the lifetime of the open/release pair; go-fuse dispatches reads to the handle's
+  `FileReader.Read` and the final close to `FileReleaser.Release`. `Getattr`
+  delegates to `os.Stat`.
+- **`ChipDir`:** Virtual directory for one chiptune file. `OnAdd` iterates over
+  the pre-scanned `[]trackEntry` (built by `buildTrackList` at mount time using
+  the pure-Go parsers) and adds a `TrackFile` child for each entry. go-fuse
   handles `Readdir`/`Lookup` from the pre-populated tree.
 - **`TrackFile`:** Virtual WAV file for one track. Implements `NodeOpener`
   (returns `FOPEN_DIRECT_IO` so all reads bypass the kernel page cache and reach
@@ -178,13 +184,14 @@ internal/vfs.TrackFile.Read(ctx, dest, offset)
        │    YES → return header bytes + zero-fill to len(dest)  (no emulation)
        │
        └─ NO (read reaches PCM region):
-            │  os.ReadFile("Mega_Man_2.nsf")
-            │  gme.Open(nsfBytes, sampleRate=44100)
-            │  emu.StartTrack(0)
-            │  emu.SetFade(playMs, fadeMs)
-            │  loop: emu.Play(chunk) → append to buffer
-            │  trim samples to exact expected count
-            │  wav.Encode(allSamples, opts) → wavBytes
+            │  singleflight.Do("Mega_Man_2.nsf\x000") ─── coalesces concurrent misses
+            │    os.ReadFile("Mega_Man_2.nsf")
+            │    gme.Open(nsfBytes, sampleRate=44100)
+            │    emu.StartTrack(0)
+            │    emu.SetFade(playMs, fadeMs)
+            │    loop: emu.Play(chunk) → append to buffer
+            │    trim samples to exact expected count
+            │    wav.Encode(allSamples, opts) → wavBytes
             │  cache.Set("Mega_Man_2.nsf", 0, wavBytes)
             └─ copy bytes from wavBytes[offset:offset+size], return
 ```
