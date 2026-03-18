@@ -3,13 +3,60 @@ package vfs
 // Internal tests (package vfs, not vfs_test) so we can reach unexported types.
 
 import (
+	"sync"
 	"syscall"
 	"testing"
 
+	"github.com/gregpoulos/chipfs/internal/cache"
 	"github.com/gregpoulos/chipfs/internal/wav"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestTrackFile_ConcurrentReads verifies that concurrent reads of the same
+// track all return consistent results. With -race this also catches data races
+// in the cache and render path that singleflight is meant to protect.
+func TestTrackFile_ConcurrentReads(t *testing.T) {
+	tracks := buildTrackList("../../testdata/fixtures/smb.nsf")
+	require.NotNil(t, tracks)
+	t0 := tracks[0]
+	totalMs := t0.totalMs()
+	c := cache.New(256 * 1024 * 1024)
+	tf := &TrackFile{
+		sourcePath:    "../../testdata/fixtures/smb.nsf",
+		trackIdx:      t0.trackIdx,
+		playMs:        t0.playMs,
+		fadeMs:        t0.fadeMs,
+		opts:          t0.opts,
+		header:        wav.HeaderBytes(totalMs, t0.opts),
+		estimatedSize: wav.EstimatedSize(totalMs, t0.opts),
+		cache:         c,
+	}
+
+	// Read from the PCM region so all goroutines trigger a render.
+	pcmOffset := int64(len(tf.header))
+	const goroutines = 8
+	results := make([][]byte, goroutines)
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for i := 0; i < goroutines; i++ {
+		i := i
+		go func() {
+			defer wg.Done()
+			dest := make([]byte, 4096)
+			result, errno := tf.Read(nil, nil, dest, pcmOffset)
+			require.Equal(t, syscall.Errno(0), errno)
+			b, _ := result.Bytes(dest)
+			results[i] = b
+		}()
+	}
+	wg.Wait()
+
+	// All goroutines must have received the same bytes.
+	for i := 1; i < goroutines; i++ {
+		assert.Equal(t, results[0], results[i], "goroutine %d got different result", i)
+	}
+}
 
 // TestClampMs verifies the default, passthrough, and cap branches.
 func TestClampMs(t *testing.T) {

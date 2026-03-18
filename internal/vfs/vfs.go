@@ -45,6 +45,7 @@ import (
 	"github.com/gregpoulos/chipfs/internal/wav"
 	"github.com/hanwen/go-fuse/v2/fs"
 	gofuse "github.com/hanwen/go-fuse/v2/fuse"
+	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -69,6 +70,7 @@ type Root struct {
 	fs.Inode
 	sourceDir string
 	cache     *cache.Cache
+	sf        *singleflight.Group
 }
 
 var _ fs.NodeOnAdder = (*Root)(nil)
@@ -85,6 +87,7 @@ func NewRoot(sourceDir string) (*Root, error) {
 	return &Root{
 		sourceDir: sourceDir,
 		cache:     cache.New(defaultCacheBytes),
+		sf:        &singleflight.Group{},
 	}, nil
 }
 
@@ -124,6 +127,7 @@ func (r *Root) OnAdd(ctx context.Context) {
 			sourcePath: fullPath,
 			tracks:     tracks,
 			cache:      r.cache,
+			sf:         r.sf,
 		}
 		dirInode := r.NewPersistentInode(ctx, dir, fs.StableAttr{Mode: syscall.S_IFDIR})
 		r.AddChild(stem, dirInode, false)
@@ -284,6 +288,7 @@ type ChipDir struct {
 	sourcePath string
 	tracks     []trackEntry
 	cache      *cache.Cache
+	sf         *singleflight.Group
 }
 
 var _ fs.NodeOnAdder = (*ChipDir)(nil)
@@ -306,6 +311,7 @@ func (d *ChipDir) OnAdd(ctx context.Context) {
 			header:        wav.HeaderBytes(totalMs, t.opts),
 			estimatedSize: wav.EstimatedSize(totalMs, t.opts),
 			cache:         d.cache,
+			sf:            d.sf,
 		}
 		ch := d.NewPersistentInode(ctx, tf, fs.StableAttr{Mode: syscall.S_IFREG})
 		d.AddChild(t.filename, ch, false)
@@ -332,6 +338,7 @@ type TrackFile struct {
 	header        []byte // WAV bytes before PCM data; pre-built at construction
 	estimatedSize int64
 	cache         *cache.Cache
+	sf            *singleflight.Group
 }
 
 var _ fs.NodeOpener = (*TrackFile)(nil)
@@ -385,10 +392,27 @@ func (f *TrackFile) Read(_ context.Context, _ fs.FileHandle, dest []byte, off in
 		return gofuse.ReadResultData(result), 0
 	}
 
-	// Read touches the PCM region: render the full track.
-	wavBytes, err := f.renderTrack()
-	if err != nil {
-		return nil, syscall.EIO
+	// Read touches the PCM region: render the full track. singleflight
+	// ensures that concurrent misses for the same (sourcePath, trackIdx)
+	// share a single render rather than duplicating the work.
+	var (
+		wavBytes []byte
+		err      error
+	)
+	if f.sf != nil {
+		key := fmt.Sprintf("%s\x00%d", f.sourcePath, f.trackIdx)
+		v, sfErr, _ := f.sf.Do(key, func() (any, error) {
+			return f.renderTrack()
+		})
+		if sfErr != nil {
+			return nil, syscall.EIO
+		}
+		wavBytes = v.([]byte)
+	} else {
+		wavBytes, err = f.renderTrack()
+		if err != nil {
+			return nil, syscall.EIO
+		}
 	}
 	if f.cache != nil {
 		f.cache.Set(f.sourcePath, f.trackIdx, wavBytes)
