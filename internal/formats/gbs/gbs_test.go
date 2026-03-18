@@ -62,18 +62,18 @@ func TestParse_NullPaddedStringsAreTrimmed(t *testing.T) {
 	assert.Equal(t, "Hirokazu Tanaka", h.Author)
 }
 
-// TestParse_Kirby tests against a real GBS file (Kirby's Dream Land) to catch
-// assumptions that synthetic fixtures might not exercise.
-func TestParse_Kirby(t *testing.T) {
-	data, err := os.ReadFile("../../../testdata/fixtures/kirby.gbs")
-	require.NoError(t, err, "testdata/fixtures/kirby.gbs must exist")
+// TestParse_SeasideVillage tests against a real GBS file (Beatscribe, CC0) to
+// catch assumptions that synthetic fixtures might not exercise.
+func TestParse_SeasideVillage(t *testing.T) {
+	data, err := os.ReadFile("../../../testdata/fixtures/seaside-village.gbs")
+	require.NoError(t, err, "testdata/fixtures/seaside-village.gbs must exist")
 
 	h, err := gbs.Parse(data)
 	require.NoError(t, err)
 
-	assert.Equal(t, 15, h.TrackCount)
+	assert.Equal(t, 1, h.TrackCount)
 	assert.Equal(t, 1, h.FirstTrack)
-	assert.Equal(t, "Kirby's Dream Land", h.Title)
-	assert.Equal(t, "Jun Ishikawa", h.Author)
-	assert.Equal(t, "1992 Nintendo", h.Copyright)
+	assert.Equal(t, "Seaside Village", h.Title)
+	assert.Equal(t, "Beatscribe", h.Author)
+	assert.Equal(t, "2026", h.Copyright)
 }

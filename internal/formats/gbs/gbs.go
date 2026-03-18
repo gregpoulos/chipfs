@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // ErrInvalidMagic is returned when the data does not begin with the GBS magic bytes.
@@ -47,11 +48,12 @@ func Parse(data []byte) (*Header, error) {
 	}, nil
 }
 
-// nullPaddedString converts a fixed-length null-padded byte slice to a string,
-// trimming everything from the first null byte onward.
+// nullPaddedString converts a fixed-length byte slice to a string, trimming at
+// the first null byte and stripping trailing spaces. GBS encoders vary: some
+// null-pad, others (e.g. hUGETracker) space-pad.
 func nullPaddedString(b []byte) string {
 	if i := bytes.IndexByte(b, 0); i >= 0 {
-		return string(b[:i])
+		b = b[:i]
 	}
-	return string(b)
+	return strings.TrimRight(string(b), " ")
 }
