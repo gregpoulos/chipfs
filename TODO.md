@@ -26,15 +26,15 @@ binary fixtures, and all subsequent packages depend on the metadata they produce
 - [x] `internal/cache` — Thread-safe Get/Set
 - [x] `internal/cache` — Byte-accurate capacity tracking
 
-## Phase 4: libgme CGO Wrapper (current)
+## Phase 4: libgme CGO Wrapper ✓
 
-- [ ] `internal/gme` — CGO import block with correct Homebrew/apt flags
-- [ ] `internal/gme` — `Open` via `gme_open_data`
-- [ ] `internal/gme` — `TrackInfo` via `gme_track_info` + `gme_free_info`
-- [ ] `internal/gme` — `StartTrack`, `SetFade`, `Play`, `TrackEnded`, `Close`
-- [ ] Add real `.nsf` fixture to `testdata/fixtures/` and unskip gme integration tests
+- [x] `internal/gme` — CGO import block with correct Homebrew/apt flags
+- [x] `internal/gme` — `Open` via `gme_open_data`
+- [x] `internal/gme` — `TrackInfo` via `gme_track_info` + `gme_free_info`
+- [x] `internal/gme` — `StartTrack`, `SetFade`, `Play`, `TrackEnded`, `Close`
+- [x] Add real `.nsf` fixture to `testdata/fixtures/` and unskip gme integration tests
 
-## Phase 5: FUSE Layer
+## Phase 5: FUSE Layer (current)
 
 - [ ] `internal/vfs` — `Root`: scan source dir, expose real files + virtual siblings
 - [ ] `internal/vfs` — `ChipDir`: `Readdir` (synthesize track filenames), `Lookup`
