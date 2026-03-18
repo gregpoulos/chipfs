@@ -34,6 +34,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -202,14 +203,8 @@ func buildTrackList(path string) []trackEntry {
 			continue
 		}
 
-		playMs := ti.PlayMs
-		if playMs <= 0 {
-			playMs = 180_000
-		}
-		fadeMs := ti.FadeMs
-		if fadeMs <= 0 {
-			fadeMs = 8_000
-		}
+		playMs := clampMs(ti.PlayMs, 180_000, 20*60*1000)
+		fadeMs := clampMs(ti.FadeMs, 8_000, 60*1000)
 
 		title := ti.Title
 		if title == "" {
@@ -343,6 +338,7 @@ func (f *TrackFile) Getattr(_ context.Context, _ fs.FileHandle, out *gofuse.Attr
 func (f *TrackFile) Read(_ context.Context, _ fs.FileHandle, dest []byte, off int64) (result gofuse.ReadResult, errno syscall.Errno) {
 	defer func() {
 		if r := recover(); r != nil {
+			log.Printf("vfs: TrackFile.Read panic (path=%s track=%d): %v", f.sourcePath, f.trackIdx, r)
 			result, errno = nil, syscall.EIO
 		}
 	}()
@@ -429,6 +425,18 @@ func (f *TrackFile) renderTrack() ([]byte, error) {
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
+
+// clampMs returns ms if it is in (0, maxMs]; returns defaultMs if ms <= 0;
+// returns maxMs if ms > maxMs.
+func clampMs(ms, defaultMs, maxMs int) int {
+	if ms <= 0 {
+		return defaultMs
+	}
+	if ms > maxMs {
+		return maxMs
+	}
+	return ms
+}
 
 // sliceAt returns the portion of src that satisfies a read of len(dest) bytes
 // starting at off, clamped to src's bounds.

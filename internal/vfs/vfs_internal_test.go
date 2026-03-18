@@ -3,12 +3,47 @@ package vfs
 // Internal tests (package vfs, not vfs_test) so we can reach unexported types.
 
 import (
+	"syscall"
 	"testing"
 
 	"github.com/gregpoulos/chipfs/internal/wav"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestClampMs verifies the default, passthrough, and cap branches.
+func TestClampMs(t *testing.T) {
+	// zero/negative → default
+	assert.Equal(t, 180_000, clampMs(0, 180_000, 20*60*1000))
+	assert.Equal(t, 180_000, clampMs(-1, 180_000, 20*60*1000))
+	// normal value → unchanged
+	assert.Equal(t, 150_000, clampMs(150_000, 180_000, 20*60*1000))
+	// exactly at max → allowed
+	assert.Equal(t, 20*60*1000, clampMs(20*60*1000, 180_000, 20*60*1000))
+	// over max → capped
+	assert.Equal(t, 20*60*1000, clampMs(25*60*1000, 180_000, 20*60*1000))
+	assert.Equal(t, 20*60*1000, clampMs(99*60*1000, 180_000, 20*60*1000))
+}
+
+// TestTrackFile_Read_PanicReturnsEIO verifies that a panic inside Read is
+// recovered and returns EIO rather than crashing the process.
+func TestTrackFile_Read_PanicReturnsEIO(t *testing.T) {
+	opts := wav.Options{SampleRate: 44100, Channels: 2}
+	header := wav.HeaderBytes(1000, opts)
+	tf := &TrackFile{
+		sourcePath:    "test.nsf",
+		trackIdx:      3,
+		header:        header,
+		estimatedSize: -1, // make([]byte, end-off) panics when end clamps to -1
+		cache:         nil,
+	}
+
+	dest := make([]byte, 65536)
+	result, errno := tf.Read(nil, nil, dest, 0)
+
+	assert.Equal(t, syscall.EIO, errno, "panic must return EIO")
+	assert.Nil(t, result, "panic must return nil result")
+}
 
 func TestBuildTrackList_SMB(t *testing.T) {
 	tracks := buildTrackList("../../testdata/fixtures/smb.nsf")

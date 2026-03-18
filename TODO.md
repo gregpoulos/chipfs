@@ -62,8 +62,8 @@ binary fixtures, and all subsequent packages depend on the metadata they produce
 - [x] `internal/vfs` — Fix `RealFile.Read`: replace `os.ReadFile` with `os.Open` + `ReadAt` so a partial read doesn't allocate the whole file
 - [ ] `internal/vfs` — Resolve the Go format parsers vs. libgme split: either wire `internal/formats/*` into `buildTrackList` as the initial directory scan (their original purpose), or document clearly why libgme is used for everything and what the Go parsers are for
 - [ ] `internal/vfs` — Thundering herd: concurrent cache misses for the same track trigger duplicate renders; use `golang.org/x/sync/singleflight` keyed by `(sourcePath, trackIdx)` to coalesce concurrent renders into one
-- [ ] `internal/vfs` — Log the recovered value in `TrackFile.Read`'s `defer/recover` block (currently panics are silently swallowed as EIO with no diagnostic output)
-- [ ] `buildTrackList` — Cap `durationMs` to a sane maximum (e.g., 20 minutes) to prevent a malformed file from claiming a huge duration, which would spike memory and wrap the `uint32` RIFF size field
+- [x] `internal/vfs` — Log the recovered value in `TrackFile.Read`'s `defer/recover` block (currently panics are silently swallowed as EIO with no diagnostic output)
+- [x] `buildTrackList` — Cap `durationMs` to a sane maximum (e.g., 20 minutes) to prevent a malformed file from claiming a huge duration, which would spike memory and wrap the `uint32` RIFF size field
 
 ## Deferred / Out of Scope for v1
 
