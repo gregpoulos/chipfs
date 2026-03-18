@@ -151,6 +151,16 @@ func TestSanitizeFilename_ReplacesSlashAndColon(t *testing.T) {
 	assert.Equal(t, "no change", sanitizeFilename("no change"))
 }
 
+func TestSanitizeFilename_StripsControlChars(t *testing.T) {
+	// Control characters (0x01–0x1F, 0x7F) must be replaced with underscores.
+	// They can appear in NSFe tlbl or SPC tag strings and would corrupt
+	// filenames or terminal output if passed through.
+	assert.Equal(t, "Title_Extra", sanitizeFilename("Title\x01Extra"))
+	assert.Equal(t, "Title_Extra", sanitizeFilename("Title\x1fExtra"))
+	assert.Equal(t, "Title_Extra", sanitizeFilename("Title\x7fExtra"))
+	assert.Equal(t, "Title_Extra", sanitizeFilename("Title\tExtra")) // \t is 0x09
+}
+
 func TestSanitizeFilename_RejectsDotDot(t *testing.T) {
 	// A game title of ".." or "." must not produce a directory with special
 	// path meaning; other names that merely contain dots are fine.

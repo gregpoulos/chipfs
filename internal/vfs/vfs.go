@@ -51,6 +51,11 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
+// defaultSampleRate is the PCM sample rate used for all renders. libgme and the
+// WAV muxer both accept an arbitrary rate; this constant is the single place to
+// change it. 44100 Hz matches CD quality and is universally supported.
+const defaultSampleRate = 44100
+
 const (
 	// maxPlayMs and maxFadeMs are the upper bounds applied by clampMs and used
 	// as the render-loop safety ceiling in renderTrack. Both must agree so a
@@ -302,7 +307,7 @@ func buildTrackList(path string, defaultPlayMs, defaultFadeMs int) []trackEntry 
 				playMs:   clampMs(playMs, defaultPlayMs, maxPlayMs),
 				fadeMs:   clampMs(fadeMs, defaultFadeMs, maxFadeMs),
 				opts: wav.Options{
-					SampleRate: 44100,
+					SampleRate: defaultSampleRate,
 					Channels:   2,
 					Metadata: wav.Metadata{
 						Title:  title,
@@ -328,7 +333,7 @@ func buildTrackList(path string, defaultPlayMs, defaultFadeMs int) []trackEntry 
 				playMs:   clampMs(0, defaultPlayMs, maxPlayMs),
 				fadeMs:   clampMs(0, defaultFadeMs, maxFadeMs),
 				opts: wav.Options{
-					SampleRate: 44100,
+					SampleRate: defaultSampleRate,
 					Channels:   2,
 					Metadata: wav.Metadata{
 						Title:  fmt.Sprintf("Track %d", i+1),
@@ -356,7 +361,7 @@ func buildTrackList(path string, defaultPlayMs, defaultFadeMs int) []trackEntry 
 			playMs:   clampMs(h.PlayDurationMs, defaultPlayMs, maxPlayMs),
 			fadeMs:   clampMs(h.FadeDurationMs, defaultFadeMs, maxFadeMs),
 			opts: wav.Options{
-				SampleRate: 44100,
+				SampleRate: defaultSampleRate,
 				Channels:   2,
 				Metadata: wav.Metadata{
 					Title:  title,
@@ -374,12 +379,16 @@ func buildTrackList(path string, defaultPlayMs, defaultFadeMs int) []trackEntry 
 
 // sanitizeFilename replaces characters that are invalid or problematic in
 // POSIX filenames. Only '/' and '\x00' are strictly forbidden, but ':' is
-// also replaced to avoid issues on macOS/Windows FUSE mounts.
+// also replaced to avoid issues on macOS/Windows FUSE mounts. Control
+// characters (0x01–0x1F, 0x7F) are replaced with '_' to prevent filename
+// corruption and terminal escape injection from NSFe tlbl or SPC tag strings.
 func sanitizeFilename(s string) string {
 	var b strings.Builder
 	for _, r := range s {
-		switch r {
-		case '/', '\x00', ':':
+		switch {
+		case r == '/' || r == ':':
+			b.WriteByte('_')
+		case r < 0x20 || r == 0x7f:
 			b.WriteByte('_')
 		default:
 			b.WriteRune(r)
