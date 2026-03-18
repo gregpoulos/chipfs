@@ -43,3 +43,31 @@ COPY scripts/smoke-test.sh /smoke-test.sh
 RUN chmod +x /smoke-test.sh
 
 ENTRYPOINT ["/smoke-test.sh"]
+
+# ── Navidrome integration test ────────────────────────────────────────────────
+# Runs chipfs and Navidrome in the same container so the FUSE mount is visible
+# to both without any cross-container mount propagation gymnastics.
+#
+# Build: docker build --target navidrome-test -t chipfs-navidrome .
+# Run:   docker run --rm --cap-add SYS_ADMIN --device /dev/fuse \
+#                   --security-opt apparmor:unconfined \
+#                   -p 4533:4533 chipfs-navidrome
+# Then open http://localhost:4533, create an admin account, and verify that
+# Artist / Album / Title tags are populated correctly for the fixture files.
+FROM runtime AS navidrome-test
+
+# Pull the Navidrome binary from the official image — no download at build time.
+COPY --from=deluan/navidrome:latest /app/navidrome /usr/local/bin/navidrome
+
+ENV ND_MUSICFOLDER=/mnt/chipfs \
+    ND_DATAFOLDER=/data \
+    ND_LOGLEVEL=info \
+    ND_SCANSCHEDULE="@every 10s" \
+    ND_PORT=4533
+
+COPY testdata/fixtures /chips
+COPY scripts/navidrome-test-start.sh /navidrome-test-start.sh
+RUN chmod +x /navidrome-test-start.sh
+
+EXPOSE 4533
+ENTRYPOINT ["/navidrome-test-start.sh"]

@@ -1,0 +1,30 @@
+# Navidrome integration test.
+#
+# Runs chipfs and Navidrome together so you can verify that Artist/Album/Title
+# tags are read correctly by a real media server.
+#
+# Usage:
+#   docker compose -f docker-compose.navidrome-test.yml up --build
+#   open http://localhost:4533
+#
+# On first visit, create an admin account. Navidrome scans every 10 seconds.
+# Check that Albums and Artists are populated from the fixture files:
+#
+#   smb         → Artist: Koji Kondo       Album: Super Mario Bros.
+#   ducktales   → Artist: (Hiroshige Tonomura)  Album: DuckTales
+#   frogs-theme → Title from SPC ID666 tag (not a generic "Track_01")
+
+services:
+  navidrome-test:
+    build:
+      context: .
+      target: navidrome-test
+    cap_add: [SYS_ADMIN]
+    devices: [/dev/fuse:/dev/fuse]
+    security_opt: [apparmor:unconfined]
+    ports: ["4533:4533"]
+    volumes:
+      - navidrome-data:/data
+
+volumes:
+  navidrome-data:
