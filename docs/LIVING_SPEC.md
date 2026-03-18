@@ -234,4 +234,4 @@ FileHandle, format parser split), test coverage (corrupt-fixture EIO test,
 (`-default_length`, `-fade_length`, `-cache_size_mb`) are done.
 
 Deferred items (RSN support, FLAC output, N64/PSX formats, write support) remain
-out of scope for v1. See [../TODO.md](../TODO.md).
+out of scope for v1. See [./TODO.md](./TODO.md).
