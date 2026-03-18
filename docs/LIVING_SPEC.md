@@ -53,13 +53,13 @@ No package imports a package above it in this list.
 Pure Go binary parsers. Each reads a file's header bytes using `encoding/binary`
 and returns a `Header` struct. No I/O, no emulation, no CGO.
 
-**Current status:** These parsers are fully tested but not yet wired into the
-production path. `buildTrackList` currently uses `gme.Open` + `gme.TrackInfo`
-for all metadata — including the initial directory scan — because libgme handles
-NSFe quirks (e.g. `plst` playlist remapping) that the Go parsers do not yet
-implement. The intended split is: Go parsers for the fast directory scan at mount
-time (track count, global metadata), libgme only when a track is opened for
-rendering. See TODO.md ("Resolve the Go format parsers vs. libgme split").
+**Current status:** These parsers are the sole metadata source for the
+mount-time directory scan. `buildTrackList` calls them directly — no CGO at
+scan time. libgme is reserved for rendering only (`renderTrack`). NSFe `plst`
+playlist remapping is handled by the Go parser: after parsing, `h.Tracks` is
+already in playlist order and `h.TrackCount` equals the playlist length, so
+`renderTrack`'s `emu.StartTrack(trackIdx)` (where `trackIdx` is the 0-indexed
+playlist position) is consistent with what libgme reports.
 
 - **NSF:** 128-byte header. Provides global title, artist, copyright, and track
   count. No per-track metadata. NSFe (extended NSF) adds chunk-based extensions
@@ -219,12 +219,10 @@ ID666 field.
 
 ## Current Implementation Status
 
-Phases 1–6 are complete. The filesystem mounts, serves virtual WAV files with
+Phases 1–7 are complete. The filesystem mounts, serves virtual WAV files with
 correct metadata and exact file sizes, and passes the Docker smoke test (22/22
-checks: directory structure, track counts, WAV metadata via raw bytes and
-ffprobe, and the file-size invariant). The production Docker image and smoke
-test live in `Dockerfile` and `scripts/smoke-test.sh`.
+checks). Phase 7 hardening items: singleflight render coalescing, LIST INFO
+RIFF chunk, RealFile FileHandle, and format parser split are all done.
 
-Remaining work (optional hardening): mount options (`-default_length`,
-`-fade_length`, `-cache_size_mb`), Navidrome end-to-end verification, fsstress
-stress testing, RSN support. See [../TODO.md](../TODO.md).
+Remaining work: test coverage gaps (Phase 8), mount options (Phase 9), and
+deferred items. See [../TODO.md](../TODO.md).

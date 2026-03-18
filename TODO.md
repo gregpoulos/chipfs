@@ -45,22 +45,16 @@ This file tracks the current state of implementation. Update it as phases comple
 - [x] Navidrome: confirmed scanner reads Artist/Album/Title correctly from virtual WAVs
 - [x] Mount option: `-allow_other` (allow other users/containers to access the mount)
 
-## Phase 7: Correctness & Compatibility
+## Phase 7: Correctness & Compatibility ✓
 
-These items affect real behaviour under load or with non-taglib media players.
-Do these before Phase 8.
-
-- [ ] `internal/vfs` — Thundering herd: concurrent cache misses for the same track trigger
-      duplicate renders; use `golang.org/x/sync/singleflight` keyed by `(sourcePath, trackIdx)`
-      to coalesce concurrent renders into one
-- [ ] `internal/wav` — Add `LIST INFO` RIFF chunk (INAM/IART/IPRD subchunks) alongside the
-      existing `id3 ` chunk for compatibility with older WAV parsers (reviewer confirmed both
-      coexist fine; affects what players outside the taglib ecosystem can read)
-- [ ] `internal/vfs` — `RealFile.Read` opens and closes the file on every FUSE read call; use
-      go-fuse's `FileHandle` to hold an open fd across reads and close it in `Release`
-- [ ] `internal/vfs` — Resolve the Go format parsers vs. libgme split: wire `internal/formats/*`
-      into `buildTrackList` for the initial directory scan (their original purpose), leaving
-      libgme only for rendering
+- [x] `internal/vfs` — Thundering herd: singleflight keyed by `(sourcePath, trackIdx)`
+      coalesces concurrent renders into one
+- [x] `internal/wav` — `LIST INFO` RIFF chunk (INAM/IART/IPRD) alongside `id3 ` for
+      compatibility with older WAV parsers
+- [x] `internal/vfs` — `RealFile`: go-fuse `FileHandle` holds open fd across reads;
+      `Release` closes it
+- [x] `internal/vfs` — Format parser split: `buildTrackList` uses pure-Go parsers for
+      mount-time scan; libgme reserved for rendering only
 
 ## Phase 8: Test Coverage & CI
 

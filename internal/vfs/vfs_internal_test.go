@@ -103,8 +103,8 @@ func TestBuildTrackList_SMB(t *testing.T) {
 	assert.Equal(t, "Track_01.wav", tracks[0].filename)
 	assert.Equal(t, "Track_18.wav", tracks[17].filename)
 
-	// libgme's default play_length for plain NSF is 150 000 ms.
-	assert.Equal(t, 150_000, tracks[0].playMs)
+	// Plain NSF has no per-track duration; clampMs returns our configured default.
+	assert.Equal(t, 180_000, tracks[0].playMs)
 	assert.Equal(t, 8_000, tracks[0].fadeMs)
 
 	// Album should be populated from ti.Game.

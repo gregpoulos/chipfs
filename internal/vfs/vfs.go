@@ -41,6 +41,9 @@ import (
 	"syscall"
 
 	"github.com/gregpoulos/chipfs/internal/cache"
+	gbsFmt "github.com/gregpoulos/chipfs/internal/formats/gbs"
+	nsfFmt "github.com/gregpoulos/chipfs/internal/formats/nsf"
+	spcFmt "github.com/gregpoulos/chipfs/internal/formats/spc"
 	"github.com/gregpoulos/chipfs/internal/gme"
 	"github.com/gregpoulos/chipfs/internal/wav"
 	"github.com/hanwen/go-fuse/v2/fs"
@@ -228,69 +231,112 @@ type trackEntry struct {
 // totalMs returns the full rendered duration including the fade.
 func (t trackEntry) totalMs() int { return t.playMs + t.fadeMs }
 
-// buildTrackList opens a chiptune file with libgme and returns its track list.
-// Returns nil if the file is not a recognized format or cannot be opened.
-// Uses gme.TrackInfo as the authoritative source for per-track metadata,
-// matching the behavior of TrackFile.renderTrack at playback time.
+// buildTrackList parses a chiptune file using the pure-Go format parsers and
+// returns its track list. Returns nil if the file is not a recognised format
+// or cannot be parsed. libgme is not called here; it is reserved for rendering
+// in renderTrack, keeping mount-time scanning CGO-free.
 func buildTrackList(path string) []trackEntry {
-	ext := strings.ToLower(filepath.Ext(path))
-	switch ext {
-	case ".nsf", ".nsfe", ".gbs", ".spc":
-	default:
-		return nil
-	}
-
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil
 	}
-	emu, err := gme.Open(data, 44100)
-	if err != nil {
-		return nil
-	}
-	defer emu.Close()
 
-	count := emu.TrackCount()
-	entries := make([]trackEntry, 0, count)
-	for i := 0; i < count; i++ {
-		ti, err := emu.TrackInfo(i)
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".nsf", ".nsfe":
+		h, err := nsfFmt.Parse(data)
 		if err != nil {
-			continue
+			return nil
 		}
+		entries := make([]trackEntry, 0, h.TrackCount)
+		for i := 0; i < h.TrackCount; i++ {
+			var title string
+			var playMs, fadeMs int
+			if i < len(h.Tracks) {
+				title = h.Tracks[i].Title
+				playMs = h.Tracks[i].DurationMs
+				fadeMs = h.Tracks[i].FadeMs
+			}
+			var filename string
+			if title != "" {
+				filename = fmt.Sprintf("%02d - %s.wav", i+1, sanitizeFilename(title))
+			} else {
+				filename = fmt.Sprintf("Track_%02d.wav", i+1)
+				title = fmt.Sprintf("Track %d", i+1)
+			}
+			entries = append(entries, trackEntry{
+				filename: filename,
+				trackIdx: i,
+				playMs:   clampMs(playMs, 180_000, maxPlayMs),
+				fadeMs:   clampMs(fadeMs, 8_000, maxFadeMs),
+				opts: wav.Options{
+					SampleRate: 44100,
+					Channels:   2,
+					Metadata: wav.Metadata{
+						Title:  title,
+						Artist: h.Artist,
+						Album:  h.Title,
+						Track:  i + 1,
+					},
+				},
+			})
+		}
+		return entries
 
-		playMs := clampMs(ti.PlayMs, 180_000, maxPlayMs)
-		fadeMs := clampMs(ti.FadeMs, 8_000, maxFadeMs)
+	case ".gbs":
+		h, err := gbsFmt.Parse(data)
+		if err != nil {
+			return nil
+		}
+		entries := make([]trackEntry, 0, h.TrackCount)
+		for i := 0; i < h.TrackCount; i++ {
+			entries = append(entries, trackEntry{
+				filename: fmt.Sprintf("Track_%02d.wav", i+1),
+				trackIdx: i,
+				playMs:   clampMs(0, 180_000, maxPlayMs),
+				fadeMs:   clampMs(0, 8_000, maxFadeMs),
+				opts: wav.Options{
+					SampleRate: 44100,
+					Channels:   2,
+					Metadata: wav.Metadata{
+						Title:  fmt.Sprintf("Track %d", i+1),
+						Artist: h.Author,
+						Album:  h.Title,
+						Track:  i + 1,
+					},
+				},
+			})
+		}
+		return entries
 
-		title := ti.Title
+	case ".spc":
+		h, err := spcFmt.Parse(data)
+		if err != nil {
+			return nil
+		}
+		title := h.SongTitle
 		if title == "" {
-			title = fmt.Sprintf("Track %d", i+1)
+			title = "Track 1"
 		}
-
-		var filename string
-		if ti.Title != "" {
-			filename = fmt.Sprintf("%02d - %s.wav", i+1, sanitizeFilename(ti.Title))
-		} else {
-			filename = fmt.Sprintf("Track_%02d.wav", i+1)
-		}
-
-		entries = append(entries, trackEntry{
-			filename: filename,
-			trackIdx: i,
-			playMs:   playMs,
-			fadeMs:   fadeMs,
+		return []trackEntry{{
+			filename: sanitizeFilename(title) + ".wav",
+			trackIdx: 0,
+			playMs:   clampMs(h.PlayDurationMs, 180_000, maxPlayMs),
+			fadeMs:   clampMs(h.FadeDurationMs, 8_000, maxFadeMs),
 			opts: wav.Options{
 				SampleRate: 44100,
 				Channels:   2,
 				Metadata: wav.Metadata{
 					Title:  title,
-					Artist: ti.Author,
-					Album:  ti.Game,
-					Track:  i + 1,
+					Artist: h.Artist,
+					Album:  h.GameTitle,
+					Track:  1,
 				},
 			},
-		})
+		}}
+
+	default:
+		return nil
 	}
-	return entries
 }
 
 // sanitizeFilename replaces characters that are invalid or problematic in
