@@ -10,7 +10,7 @@
 # On first visit, create an admin account. Navidrome scans every 10 seconds.
 # Check that Albums and Artists are populated from the fixture files:
 #
-#   smb           → Artist: Koji Kondo            Album: Super Mario Bros.
+#   pently        → Artist: DJ Tepples             Album: Pently demo
 #   ducktales     → Artist: (Hiroshige Tonomura)  Album: DuckTales
 #   ode-to-joy    → Artist: Ludwig van Beethoven   Title from SPC ID666 tag
 #   seaside-village → Artist: Beatscribe           Title from GBS header

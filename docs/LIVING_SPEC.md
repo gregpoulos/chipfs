@@ -156,7 +156,7 @@ Flags:
 On success it prints a summary line:
 
 ```
-Rendered: Super Mario Bros. — track 1/18 — 150000ms → /tmp/smb_track01.wav (26.5 MB)
+Rendered: Pently demo — Track 1 — track 1/24 — 180000ms → /tmp/pently_track01.wav (30.2 MB)
 ```
 
 This is a development tool only and is not part of the production filesystem binary.

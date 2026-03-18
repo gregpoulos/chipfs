@@ -61,13 +61,13 @@ trap cleanup EXIT
 
 echo "── 1. Root directory ────────────────────────────────────────────────────────"
 
-for f in smb.nsf ducktales.nsfe seaside-village.gbs ode-to-joy.spc; do
+for f in pently.nsf ducktales.nsfe seaside-village.gbs ode-to-joy.spc; do
     [[ -f "$MOUNT/$f" ]] \
         && pass "real file '$f' present" \
         || fail "real file '$f' missing"
 done
 
-for d in smb ducktales seaside-village ode-to-joy; do
+for d in pently ducktales seaside-village ode-to-joy; do
     [[ -d "$MOUNT/$d" ]] \
         && pass "virtual dir '$d/' present" \
         || fail "virtual dir '$d/' missing"
@@ -78,7 +78,7 @@ done
 echo ""
 echo "── 2. Track counts ──────────────────────────────────────────────────────────"
 
-check_eq "smb track count"               "$(ls "$MOUNT/smb"       | wc -l | tr -d ' ')" "18"
+check_eq "pently track count"            "$(ls "$MOUNT/pently"    | wc -l | tr -d ' ')" "24"
 check_eq "ducktales track count (plst)"  "$(ls "$MOUNT/ducktales" | wc -l | tr -d ' ')" "16"
 check_eq "ode-to-joy track count (SPC)"  "$(ls "$MOUNT/ode-to-joy" | wc -l | tr -d ' ')" "1"
 check_eq "seaside-village track count (GBS)" "$(ls "$MOUNT/seaside-village" | wc -l | tr -d ' ')" "1"
@@ -112,21 +112,21 @@ probe() {
 }
 
 # Primary: check raw header bytes (reliable, no render triggered).
-check_wav_bytes "smb album tag (bytes)"    "$MOUNT/smb/Track_01.wav"        "Super Mario Bros"
-check_wav_bytes "smb artist tag (bytes)"   "$MOUNT/smb/Track_01.wav"        "Koji Kondo"
+check_wav_bytes "pently album tag (bytes)"  "$MOUNT/pently/Track_01.wav"     "Pently demo"
+check_wav_bytes "pently artist tag (bytes)" "$MOUNT/pently/Track_01.wav"    "DJ Tepples"
 duck_first=$(ls "$MOUNT/ducktales" | head -1)
 check_wav_bytes "ducktales album tag (bytes)" "$MOUNT/ducktales/$duck_first" "DuckTales"
 ode_first=$(ls "$MOUNT/ode-to-joy" | head -1)
 check_wav_bytes "ode-to-joy title (bytes)"    "$MOUNT/ode-to-joy/$ode_first"   "Ode"
 
 # Advisory: also validate via ffprobe so we know a real media tool can read tags.
-smb_probe=$(probe "$MOUNT/smb/Track_01.wav")
-[[ "$smb_probe" == *"album=Super Mario Bros."* ]] \
-    && pass "smb album tag (ffprobe)" \
-    || fail "smb album tag (ffprobe) — got: ${smb_probe:-<empty>}"
-[[ "$smb_probe" == *"artist=Koji Kondo"* ]] \
-    && pass "smb artist tag (ffprobe)" \
-    || fail "smb artist tag (ffprobe) — got: ${smb_probe:-<empty>}"
+pently_probe=$(probe "$MOUNT/pently/Track_01.wav")
+[[ "$pently_probe" == *"album=Pently demo"* ]] \
+    && pass "pently album tag (ffprobe)" \
+    || fail "pently album tag (ffprobe) — got: ${pently_probe:-<empty>}"
+[[ "$pently_probe" == *"artist=DJ Tepples"* ]] \
+    && pass "pently artist tag (ffprobe)" \
+    || fail "pently artist tag (ffprobe) — got: ${pently_probe:-<empty>}"
 
 duck_probe=$(probe "$MOUNT/ducktales/$duck_first")
 [[ "$duck_probe" == *"album=DuckTales"* ]] \
@@ -156,9 +156,9 @@ size_check() {
         "$read_size" "$stat_size"
 }
 
-# Use ode-to-joy (SPC) and smb track 1 to exercise both formats.
+# Use ode-to-joy (SPC) and pently track 1 to exercise both formats.
 size_check "$MOUNT/ode-to-joy/$ode_first" "ode-to-joy (SPC)"
-size_check "$MOUNT/smb/Track_01.wav" "smb track 01 (NSF)"
+size_check "$MOUNT/pently/Track_01.wav" "pently track 01 (NSF)"
 
 # ── 5. -allow_other flag ──────────────────────────────────────────────────────
 #
@@ -184,7 +184,7 @@ if ! mountpoint -q "$MOUNT" 2>/dev/null; then
     fail "-allow_other: chipfs did not mount within 5 seconds"
 else
     pass "-allow_other: mount succeeded"
-    [[ -d "$MOUNT/smb" ]] \
+    [[ -d "$MOUNT/pently" ]] \
         && pass "-allow_other: virtual directory accessible" \
         || fail "-allow_other: virtual directory not accessible"
 fi

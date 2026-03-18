@@ -39,29 +39,29 @@ ok  	github.com/gregpoulos/chipfs/internal/wav	(cached)
 
 ## Render Pipeline
 
-The `cmd/render` tool exercises the full pipeline — format parser → libgme emulator → WAV muxer — without requiring a FUSE mount. Here we render track 1 of the Super Mario Bros. NSF fixture (a real ROM music file bundled as a test fixture):
+The `cmd/render` tool exercises the full pipeline — format parser → libgme emulator → WAV muxer — without requiring a FUSE mount. Here we render track 1 of the Pently demo NSF fixture (original compositions by Damian Yerrick, zlib license):
 
 ```bash
-go run ./cmd/render -file testdata/fixtures/smb.nsf -track 0 -duration 10000 -fade 2000 -out /tmp/smb_track01.wav
+go run ./cmd/render -file testdata/fixtures/pently.nsf -track 0 -duration 10000 -fade 2000 -out /tmp/pently_track01.wav
 ```
 
 ```output
-Rendered: Super Mario Bros. — Track 1 — track 1/18 — 10000ms → /tmp/smb_track01.wav (2.0 MB)
+Rendered: Pently demo — Track 1 — track 1/24 — 10000ms → /tmp/pently_track01.wav (2.0 MB)
 ```
 
 The output is a standard WAV file. Let's inspect it with ffprobe to confirm the metadata and audio properties:
 
 ```bash
-ffprobe -v quiet -show_format /tmp/smb_track01.wav 2>&1 | grep -E 'format_name|duration=|size=|TAG'
+ffprobe -v quiet -show_format /tmp/pently_track01.wav 2>&1 | grep -E 'format_name|duration=|size=|TAG'
 ```
 
 ```output
 format_name=wav
 duration=12.027937
-size=2121944
+size=2121932
 TAG:title=Track 1
-TAG:artist=Koji Kondo
-TAG:album=Super Mario Bros.
+TAG:artist=DJ Tepples
+TAG:album=Pently demo
 TAG:track=1
 ```
 
