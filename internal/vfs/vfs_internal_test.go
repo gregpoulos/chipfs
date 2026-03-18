@@ -42,12 +42,11 @@ func TestTrackFile_ConcurrentReads(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
 	for i := 0; i < goroutines; i++ {
-		i := i
 		go func() {
 			defer wg.Done()
 			dest := make([]byte, 4096)
 			result, errno := tf.Read(nil, nil, dest, pcmOffset)
-			require.Equal(t, syscall.Errno(0), errno)
+			assert.Equal(t, syscall.Errno(0), errno) // require is not safe outside the test goroutine
 			b, _ := result.Bytes(dest)
 			results[i] = b
 		}()
