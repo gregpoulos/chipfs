@@ -67,7 +67,8 @@ func Parse(data []byte) (*Header, error) {
 func parseNSFe(data []byte) (*Header, error) {
 	h := &Header{}
 	hasINFO := false
-	pos := 4 // skip "NSFE" magic
+	var plst []byte // raw playlist bytes; each byte is an internal track index
+	pos := 4        // skip "NSFE" magic
 
 	for pos+8 <= len(data) {
 		size := int(binary.LittleEndian.Uint32(data[pos:]))
@@ -123,7 +124,11 @@ func parseNSFe(data []byte) (*Header, error) {
 		case "fade":
 			applyTrackInt32s(h, chunk, func(t *TrackInfo, v int) { t.FadeMs = v })
 
-		case "DATA", "BANK", "RATE", "NSF2", "VRC7", "taut", "plst", "psfx", "text", "mixe", "regn":
+		case "plst":
+			plst = make([]byte, len(chunk))
+			copy(plst, chunk)
+
+		case "DATA", "BANK", "RATE", "NSF2", "VRC7", "taut", "psfx", "text", "mixe", "regn":
 			// Recognized but unimplemented: silently skip.
 
 		default:
@@ -139,6 +144,21 @@ func parseNSFe(data []byte) (*Header, error) {
 	if !hasINFO {
 		return nil, fmt.Errorf("nsfe: required INFO chunk not found")
 	}
+
+	// plst remapping: when present, it defines the playback order as a sequence of
+	// internal track indices. TrackCount becomes the playlist length, and the Tracks
+	// slice is reordered to match playlist position — exactly as libgme reports.
+	if len(plst) > 0 {
+		internalTracks := h.Tracks
+		h.Tracks = make([]TrackInfo, len(plst))
+		for i, idx := range plst {
+			if int(idx) < len(internalTracks) {
+				h.Tracks[i] = internalTracks[idx]
+			}
+		}
+		h.TrackCount = len(plst)
+	}
+
 	return h, nil
 }
 

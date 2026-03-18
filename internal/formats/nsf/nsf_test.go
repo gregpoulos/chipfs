@@ -300,6 +300,65 @@ func TestParseNSFe_TruncatedINFO(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// plstChunk builds an NSFe plst chunk from a slice of internal track indices.
+func plstChunk(indices []int) nsfeChunk {
+	data := make([]byte, len(indices))
+	for i, idx := range indices {
+		data[i] = byte(idx)
+	}
+	return nsfeChunk{"plst", data}
+}
+
+func TestParseNSFe_PlstRemapsTracks(t *testing.T) {
+	// Internal tracks: 0="Overture", 1="Theme", 2="SFX"
+	// Playlist: [2, 0, 1] — reorders them
+	data := makeNSFe([]nsfeChunk{
+		infoChunk(3, 0),
+		tlblChunk([]string{"Overture", "Theme", "SFX"}),
+		timeChunk([]int{60_000, 90_000, 500}),
+		plstChunk([]int{2, 0, 1}),
+		nend,
+	})
+
+	h, err := nsf.Parse(data)
+	require.NoError(t, err)
+
+	// TrackCount must reflect playlist length, not internal track count.
+	assert.Equal(t, 3, h.TrackCount)
+	require.Len(t, h.Tracks, 3)
+
+	// Playlist slot 0 → internal track 2 ("SFX", 500ms)
+	assert.Equal(t, "SFX", h.Tracks[0].Title)
+	assert.Equal(t, 500, h.Tracks[0].DurationMs)
+
+	// Playlist slot 1 → internal track 0 ("Overture", 60000ms)
+	assert.Equal(t, "Overture", h.Tracks[1].Title)
+	assert.Equal(t, 60_000, h.Tracks[1].DurationMs)
+
+	// Playlist slot 2 → internal track 1 ("Theme", 90000ms)
+	assert.Equal(t, "Theme", h.Tracks[2].Title)
+	assert.Equal(t, 90_000, h.Tracks[2].DurationMs)
+}
+
+func TestParseNSFe_PlstShorterThanInternalCount(t *testing.T) {
+	// plst can select a subset of internal tracks.
+	data := makeNSFe([]nsfeChunk{
+		infoChunk(5, 0),
+		tlblChunk([]string{"A", "B", "C", "D", "E"}),
+		plstChunk([]int{0, 2, 4}), // only 3 of 5 internal tracks
+		nend,
+	})
+
+	h, err := nsf.Parse(data)
+	require.NoError(t, err)
+
+	assert.Equal(t, 3, h.TrackCount)
+	require.Len(t, h.Tracks, 3)
+	assert.Equal(t, "A", h.Tracks[0].Title)
+	assert.Equal(t, "C", h.Tracks[1].Title)
+	assert.Equal(t, "E", h.Tracks[2].Title)
+}
+
 // TestParse_DuckTales tests against a real NSFe file to catch assumptions
 // that synthetic fixtures might not exercise.
 func TestParse_DuckTales(t *testing.T) {
@@ -309,12 +368,14 @@ func TestParse_DuckTales(t *testing.T) {
 	h, err := nsf.Parse(data)
 	require.NoError(t, err)
 
-	assert.Equal(t, 45, h.TrackCount)
+	// plst has 16 entries; TrackCount must reflect playlist length, matching libgme.
+	assert.Equal(t, 16, h.TrackCount)
 	assert.Equal(t, 1, h.FirstTrack)
 	assert.Equal(t, "DuckTales", h.Title)
 	assert.Equal(t, "Hiroshige Tonomura, Yoshihiro Sakaguchi", h.Artist)
 	assert.Equal(t, "\xa91989 Capcom", h.Copyright)
 
+	// Playlist slot 0 → internal track 0 (Title Screen / Ending theme)
 	require.Greater(t, len(h.Tracks), 0)
 	assert.Equal(t, "Title Screen / Ending - Part 2 [DuckTales Theme]", h.Tracks[0].Title)
 	assert.Equal(t, 105_000, h.Tracks[0].DurationMs)
