@@ -19,7 +19,7 @@ import (
 // track all return consistent results. With -race this also catches data races
 // in the cache and render path that singleflight is meant to protect.
 func TestTrackFile_ConcurrentReads(t *testing.T) {
-	tracks := buildTrackList("../../testdata/fixtures/smb.nsf")
+	tracks := buildTrackList("../../testdata/fixtures/smb.nsf", 180_000, 8_000)
 	require.NotNil(t, tracks)
 	t0 := tracks[0]
 	totalMs := t0.totalMs()
@@ -111,7 +111,7 @@ func TestTrackFile_Read_RenderErrorReturnsEIO(t *testing.T) {
 }
 
 func TestBuildTrackList_SMB(t *testing.T) {
-	tracks := buildTrackList("../../testdata/fixtures/smb.nsf")
+	tracks := buildTrackList("../../testdata/fixtures/smb.nsf", 180_000, 8_000)
 	require.NotNil(t, tracks, "smb.nsf must be recognised as a chiptune file")
 
 	assert.Equal(t, 18, len(tracks))
@@ -130,7 +130,7 @@ func TestBuildTrackList_SMB(t *testing.T) {
 }
 
 func TestBuildTrackList_DuckTales(t *testing.T) {
-	tracks := buildTrackList("../../testdata/fixtures/ducktales.nsfe")
+	tracks := buildTrackList("../../testdata/fixtures/ducktales.nsfe", 180_000, 8_000)
 	require.NotNil(t, tracks, "ducktales.nsfe must be recognised as a chiptune file")
 
 	// plst remapping: libgme reports 16 playlist entries.
@@ -142,7 +142,7 @@ func TestBuildTrackList_DuckTales(t *testing.T) {
 }
 
 func TestBuildTrackList_UnknownExtension(t *testing.T) {
-	assert.Nil(t, buildTrackList("/etc/hosts"),
+	assert.Nil(t, buildTrackList("/etc/hosts", 180_000, 8_000),
 		"non-chiptune file must return nil")
 }
 
@@ -242,7 +242,7 @@ func TestTrackFile_LargeBufferRead_HeaderPlusZeros(t *testing.T) {
 func TestTrackFile_EstimatedSizeMatchesRenderOutput(t *testing.T) {
 	// Full pipeline test using a real fixture: rendered WAV must have exactly
 	// EstimatedSize bytes. This verifies the sample-trimming in renderTrack.
-	tracks := buildTrackList("../../testdata/fixtures/smb.nsf")
+	tracks := buildTrackList("../../testdata/fixtures/smb.nsf", 180_000, 8_000)
 	require.NotNil(t, tracks)
 
 	// Use track 0; it's short enough with a quick fade for a unit test.

@@ -66,14 +66,14 @@ This file tracks the current state of implementation. Update it as phases comple
 - [x] CI — `.github/workflows/ci.yml`: `go test -race ./...` on macos-latest +
       Docker smoke test on ubuntu-latest; status badge added to README
 
-## Phase 9: Mount Options
+## Phase 9: Mount Options ✓
 
-User-facing knobs. Implement in any order; each is self-contained.
-
-- [ ] `-default_length` — play duration in seconds for tracks without embedded duration metadata
-- [ ] `-fade_length` — fade-out length in seconds (currently hardcoded to 8 s)
-- [ ] `-cache_size_mb` — LRU cache capacity (default 256 MB; reviewer suggests 128 MB is
-      sufficient for most home NAS deployments)
+- [x] `-default_length` — play duration in seconds for tracks without embedded duration
+      metadata (default 180; converts to ms in `vfs.Options.DefaultPlayMs`)
+- [x] `-fade_length` — fade-out duration in seconds (default 8; converts to ms in
+      `vfs.Options.DefaultFadeMs`)
+- [x] `-cache_size_mb` — LRU cache capacity in MB (default 256; converts to bytes in
+      `vfs.Options.CacheBytes`)
 
 ## Deferred / Out of Scope for v1
 

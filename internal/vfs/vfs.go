@@ -52,15 +52,39 @@ import (
 )
 
 const (
-	// defaultCacheBytes is the default LRU cache capacity (256 MB).
-	defaultCacheBytes = 256 * 1024 * 1024
-
 	// maxPlayMs and maxFadeMs are the upper bounds applied by clampMs and used
 	// as the render-loop safety ceiling in renderTrack. Both must agree so a
 	// clamped duration can never exceed the loop's stopping condition.
 	maxPlayMs = 20 * 60 * 1000 // 20 minutes
 	maxFadeMs = 60 * 1000      // 60 seconds
 )
+
+// Options configures a Root at mount time. Zero values are replaced with
+// the built-in defaults listed below.
+type Options struct {
+	// DefaultPlayMs is the play duration used for tracks without embedded
+	// duration metadata. Default: 180 000 ms (3 minutes).
+	DefaultPlayMs int
+
+	// DefaultFadeMs is the fade-out duration appended to DefaultPlayMs.
+	// Default: 8 000 ms (8 seconds).
+	DefaultFadeMs int
+
+	// CacheBytes is the LRU cache capacity. Default: 256 MB.
+	CacheBytes int64
+}
+
+func (o *Options) applyDefaults() {
+	if o.DefaultPlayMs <= 0 {
+		o.DefaultPlayMs = 180_000
+	}
+	if o.DefaultFadeMs <= 0 {
+		o.DefaultFadeMs = 8_000
+	}
+	if o.CacheBytes <= 0 {
+		o.CacheBytes = 256 * 1024 * 1024
+	}
+}
 
 // ---------------------------------------------------------------------------
 // Root
@@ -71,26 +95,32 @@ const (
 // chiptune file (virtual ChipDir sibling).
 type Root struct {
 	fs.Inode
-	sourceDir string
-	cache     *cache.Cache
-	sf        *singleflight.Group
+	sourceDir     string
+	defaultPlayMs int
+	defaultFadeMs int
+	cache         *cache.Cache
+	sf            *singleflight.Group
 }
 
 var _ fs.NodeOnAdder = (*Root)(nil)
 
 // NewRoot creates a Root node backed by the given source directory.
+// Zero-valued fields in opts are replaced with built-in defaults.
 // Returns an error if sourceDir is empty or does not exist.
-func NewRoot(sourceDir string) (*Root, error) {
+func NewRoot(sourceDir string, opts Options) (*Root, error) {
 	if sourceDir == "" {
 		return nil, fmt.Errorf("vfs: source directory must not be empty")
 	}
 	if _, err := os.Stat(sourceDir); err != nil {
 		return nil, fmt.Errorf("vfs: source directory not accessible: %w", err)
 	}
+	opts.applyDefaults()
 	return &Root{
-		sourceDir: sourceDir,
-		cache:     cache.New(defaultCacheBytes),
-		sf:        &singleflight.Group{},
+		sourceDir:     sourceDir,
+		defaultPlayMs: opts.DefaultPlayMs,
+		defaultFadeMs: opts.DefaultFadeMs,
+		cache:         cache.New(opts.CacheBytes),
+		sf:            &singleflight.Group{},
 	}, nil
 }
 
@@ -121,7 +151,7 @@ func (r *Root) OnAdd(ctx context.Context) {
 		r.AddChild(name, rfInode, false)
 
 		// For recognized chiptune files, also add a virtual ChipDir.
-		tracks := buildTrackList(fullPath)
+		tracks := buildTrackList(fullPath, r.defaultPlayMs, r.defaultFadeMs)
 		if tracks == nil {
 			continue
 		}
@@ -235,7 +265,10 @@ func (t trackEntry) totalMs() int { return t.playMs + t.fadeMs }
 // returns its track list. Returns nil if the file is not a recognised format
 // or cannot be parsed. libgme is not called here; it is reserved for rendering
 // in renderTrack, keeping mount-time scanning CGO-free.
-func buildTrackList(path string) []trackEntry {
+//
+// defaultPlayMs and defaultFadeMs are used as the clampMs fallback for tracks
+// that have no embedded duration or fade metadata.
+func buildTrackList(path string, defaultPlayMs, defaultFadeMs int) []trackEntry {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil
@@ -266,8 +299,8 @@ func buildTrackList(path string) []trackEntry {
 			entries = append(entries, trackEntry{
 				filename: filename,
 				trackIdx: i,
-				playMs:   clampMs(playMs, 180_000, maxPlayMs),
-				fadeMs:   clampMs(fadeMs, 8_000, maxFadeMs),
+				playMs:   clampMs(playMs, defaultPlayMs, maxPlayMs),
+				fadeMs:   clampMs(fadeMs, defaultFadeMs, maxFadeMs),
 				opts: wav.Options{
 					SampleRate: 44100,
 					Channels:   2,
@@ -292,8 +325,8 @@ func buildTrackList(path string) []trackEntry {
 			entries = append(entries, trackEntry{
 				filename: fmt.Sprintf("Track_%02d.wav", i+1),
 				trackIdx: i,
-				playMs:   clampMs(0, 180_000, maxPlayMs),
-				fadeMs:   clampMs(0, 8_000, maxFadeMs),
+				playMs:   clampMs(0, defaultPlayMs, maxPlayMs),
+				fadeMs:   clampMs(0, defaultFadeMs, maxFadeMs),
 				opts: wav.Options{
 					SampleRate: 44100,
 					Channels:   2,
@@ -320,8 +353,8 @@ func buildTrackList(path string) []trackEntry {
 		return []trackEntry{{
 			filename: sanitizeFilename(title) + ".wav",
 			trackIdx: 0,
-			playMs:   clampMs(h.PlayDurationMs, 180_000, maxPlayMs),
-			fadeMs:   clampMs(h.FadeDurationMs, 8_000, maxFadeMs),
+			playMs:   clampMs(h.PlayDurationMs, defaultPlayMs, maxPlayMs),
+			fadeMs:   clampMs(h.FadeDurationMs, defaultFadeMs, maxFadeMs),
 			opts: wav.Options{
 				SampleRate: 44100,
 				Channels:   2,

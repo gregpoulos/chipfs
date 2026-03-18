@@ -9,18 +9,18 @@ import (
 )
 
 func TestNewRoot_RejectsEmptySourceDir(t *testing.T) {
-	_, err := vfs.NewRoot("")
+	_, err := vfs.NewRoot("", vfs.Options{})
 	assert.Error(t, err, "empty source directory must be rejected")
 }
 
 func TestNewRoot_RejectsNonExistentDir(t *testing.T) {
-	_, err := vfs.NewRoot("/this/path/does/not/exist/chipfs-test")
+	_, err := vfs.NewRoot("/this/path/does/not/exist/chipfs-test", vfs.Options{})
 	assert.Error(t, err, "non-existent source directory must be rejected")
 }
 
 func TestNewRoot_AcceptsValidDir(t *testing.T) {
 	dir := t.TempDir()
-	root, err := vfs.NewRoot(dir)
+	root, err := vfs.NewRoot(dir, vfs.Options{})
 	require.NoError(t, err)
 	assert.NotNil(t, root)
 }

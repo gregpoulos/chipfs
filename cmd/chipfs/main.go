@@ -13,9 +13,12 @@ import (
 )
 
 type config struct {
-	source     string
-	mountpoint string
-	allowOther bool
+	source           string
+	mountpoint       string
+	allowOther       bool
+	defaultLengthSec int
+	fadeLengthSec    int
+	cacheSizeMb      int
 }
 
 func parseArgs(args []string) (config, error) {
@@ -23,6 +26,9 @@ func parseArgs(args []string) (config, error) {
 	source := fset.String("source", "", "path to directory containing chiptune files (required)")
 	mountpoint := fset.String("mountpoint", "", "path to FUSE mount point (required)")
 	allowOther := fset.Bool("allow_other", false, "allow other users (e.g. Docker containers) to access the mount")
+	defaultLength := fset.Int("default_length", 180, "default play duration in seconds for tracks without embedded duration")
+	fadeLength := fset.Int("fade_length", 8, "fade-out duration in seconds")
+	cacheSizeMb := fset.Int("cache_size_mb", 256, "LRU cache capacity in MB")
 	if err := fset.Parse(args); err != nil {
 		return config{}, err
 	}
@@ -30,7 +36,14 @@ func parseArgs(args []string) (config, error) {
 		fset.Usage()
 		return config{}, fmt.Errorf("both -source and -mountpoint are required")
 	}
-	return config{source: *source, mountpoint: *mountpoint, allowOther: *allowOther}, nil
+	return config{
+		source:           *source,
+		mountpoint:       *mountpoint,
+		allowOther:       *allowOther,
+		defaultLengthSec: *defaultLength,
+		fadeLengthSec:    *fadeLength,
+		cacheSizeMb:      *cacheSizeMb,
+	}, nil
 }
 
 func main() {
@@ -46,7 +59,11 @@ func main() {
 }
 
 func run(cfg config) error {
-	root, err := vfs.NewRoot(cfg.source)
+	root, err := vfs.NewRoot(cfg.source, vfs.Options{
+		DefaultPlayMs: cfg.defaultLengthSec * 1000,
+		DefaultFadeMs: cfg.fadeLengthSec * 1000,
+		CacheBytes:    int64(cfg.cacheSizeMb) * 1024 * 1024,
+	})
 	if err != nil {
 		return err
 	}
