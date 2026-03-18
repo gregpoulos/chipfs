@@ -9,11 +9,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// smbFixture loads the Super Mario Bros. NSF fixture, failing the test if absent.
-func smbFixture(t *testing.T) []byte {
+// pentlyFixture loads the Pently demo NSF fixture, failing the test if absent.
+func pentlyFixture(t *testing.T) []byte {
 	t.Helper()
-	data, err := os.ReadFile("../../testdata/fixtures/smb.nsf")
-	require.NoError(t, err, "testdata/fixtures/smb.nsf must exist")
+	data, err := os.ReadFile("../../testdata/fixtures/pently.nsf")
+	require.NoError(t, err, "testdata/fixtures/pently.nsf must exist")
 	return data
 }
 
@@ -32,16 +32,16 @@ func TestOpen_RejectsInvalidData(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestOpen_SMB(t *testing.T) {
-	emu, err := gme.Open(smbFixture(t), 44100)
+func TestOpen_Pently(t *testing.T) {
+	emu, err := gme.Open(pentlyFixture(t), 44100)
 	require.NoError(t, err)
 	defer emu.Close()
 
-	assert.Equal(t, 18, emu.TrackCount())
+	assert.Equal(t, 24, emu.TrackCount())
 }
 
-func TestTrackInfo_SMB(t *testing.T) {
-	emu, err := gme.Open(smbFixture(t), 44100)
+func TestTrackInfo_Pently(t *testing.T) {
+	emu, err := gme.Open(pentlyFixture(t), 44100)
 	require.NoError(t, err)
 	defer emu.Close()
 
@@ -49,9 +49,9 @@ func TestTrackInfo_SMB(t *testing.T) {
 	require.NoError(t, err)
 
 	// NSF stores global metadata; libgme exposes it on every track.
-	assert.Equal(t, "Super Mario Bros.", info.Game)
-	assert.Equal(t, "Koji Kondo", info.Author)
-	assert.Equal(t, "1985 Nintendo", info.Copyright)
+	assert.Equal(t, "Pently demo", info.Game)
+	assert.Equal(t, "DJ Tepples", info.Author)
+	assert.Equal(t, "2019 Damian Yerrick", info.Copyright)
 	// play_length for plain NSF (no per-track duration) defaults to 150000ms (2.5 min).
 	assert.Greater(t, info.PlayMs, 0)
 	// fade_length is -1 when not specified by the file.
@@ -59,7 +59,7 @@ func TestTrackInfo_SMB(t *testing.T) {
 }
 
 func TestPlay_ProducesNonZeroSamples(t *testing.T) {
-	emu, err := gme.Open(smbFixture(t), 44100)
+	emu, err := gme.Open(pentlyFixture(t), 44100)
 	require.NoError(t, err)
 	defer emu.Close()
 
@@ -94,7 +94,7 @@ func TestTrackCount_DuckTales(t *testing.T) {
 }
 
 func TestTrackEnded_AfterFade(t *testing.T) {
-	emu, err := gme.Open(smbFixture(t), 44100)
+	emu, err := gme.Open(pentlyFixture(t), 44100)
 	require.NoError(t, err)
 	defer emu.Close()
 

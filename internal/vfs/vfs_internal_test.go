@@ -20,13 +20,13 @@ import (
 // track all return consistent results. With -race this also catches data races
 // in the cache and render path that singleflight is meant to protect.
 func TestTrackFile_ConcurrentReads(t *testing.T) {
-	tracks := buildTrackList("../../testdata/fixtures/smb.nsf", 180_000, 8_000)
+	tracks := buildTrackList("../../testdata/fixtures/pently.nsf", 180_000, 8_000)
 	require.NotNil(t, tracks)
 	t0 := tracks[0]
 	totalMs := t0.totalMs()
 	c := cache.New(256 * 1024 * 1024)
 	tf := &TrackFile{
-		sourcePath:    "../../testdata/fixtures/smb.nsf",
+		sourcePath:    "../../testdata/fixtures/pently.nsf",
 		trackIdx:      t0.trackIdx,
 		playMs:        t0.playMs,
 		fadeMs:        t0.fadeMs,
@@ -110,23 +110,23 @@ func TestTrackFile_Read_RenderErrorReturnsEIO(t *testing.T) {
 	assert.Nil(t, result, "render error must return nil result")
 }
 
-func TestBuildTrackList_SMB(t *testing.T) {
-	tracks := buildTrackList("../../testdata/fixtures/smb.nsf", 180_000, 8_000)
-	require.NotNil(t, tracks, "smb.nsf must be recognised as a chiptune file")
+func TestBuildTrackList_Pently(t *testing.T) {
+	tracks := buildTrackList("../../testdata/fixtures/pently.nsf", 180_000, 8_000)
+	require.NotNil(t, tracks, "pently.nsf must be recognised as a chiptune file")
 
-	assert.Equal(t, 18, len(tracks))
+	assert.Equal(t, 24, len(tracks))
 
 	// Plain NSF has no per-track titles → synthesised filenames.
 	assert.Equal(t, "Track_01.wav", tracks[0].filename)
-	assert.Equal(t, "Track_18.wav", tracks[17].filename)
+	assert.Equal(t, "Track_24.wav", tracks[23].filename)
 
 	// Plain NSF has no per-track duration; clampMs returns our configured default.
 	assert.Equal(t, 180_000, tracks[0].playMs)
 	assert.Equal(t, 8_000, tracks[0].fadeMs)
 
-	// Album should be populated from ti.Game.
-	assert.Equal(t, "Super Mario Bros.", tracks[0].opts.Metadata.Album)
-	assert.Equal(t, "Koji Kondo", tracks[0].opts.Metadata.Artist)
+	// Album and artist should be populated from NSF header.
+	assert.Equal(t, "Pently demo", tracks[0].opts.Metadata.Album)
+	assert.Equal(t, "DJ Tepples", tracks[0].opts.Metadata.Artist)
 }
 
 func TestBuildTrackList_DuckTales(t *testing.T) {
@@ -252,13 +252,13 @@ func TestTrackFile_LargeBufferRead_HeaderPlusZeros(t *testing.T) {
 func TestTrackFile_EstimatedSizeMatchesRenderOutput(t *testing.T) {
 	// Full pipeline test using a real fixture: rendered WAV must have exactly
 	// EstimatedSize bytes. This verifies the sample-trimming in renderTrack.
-	tracks := buildTrackList("../../testdata/fixtures/smb.nsf", 180_000, 8_000)
+	tracks := buildTrackList("../../testdata/fixtures/pently.nsf", 180_000, 8_000)
 	require.NotNil(t, tracks)
 
 	// Use track 0; it's short enough with a quick fade for a unit test.
 	t0 := tracks[0]
 	tf := &TrackFile{
-		sourcePath:    "../../testdata/fixtures/smb.nsf",
+		sourcePath:    "../../testdata/fixtures/pently.nsf",
 		trackIdx:      t0.trackIdx,
 		playMs:        t0.playMs,
 		fadeMs:        t0.fadeMs,

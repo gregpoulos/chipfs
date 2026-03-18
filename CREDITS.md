@@ -2,6 +2,12 @@
 
 ## Test Fixtures
 
+### `testdata/fixtures/pently.nsf`
+
+"Pently demo" by Damian Yerrick (DJ Tepples), released under the
+[zlib license](https://github.com/pinobatch/pently/blob/master/LICENSE).
+Source: [pinobatch/pently](https://github.com/pinobatch/pently).
+
 ### `testdata/fixtures/seaside-village.gbs`
 
 "Seaside Village" by [Beatscribe](https://beatscribe.itch.io), released as CC0
