@@ -3,7 +3,7 @@
 *This document describes the current architecture of ChipFS. It is updated as
 the implementation evolves. For background on design decisions, see
 [DESIGN.md](DESIGN.md). For accessible conceptual explanations, see
-[CONCEPTS.md](CONCEPTS.md). For current task status, see [../TODO.md](../TODO.md).*
+[CONCEPTS.md](CONCEPTS.md). For current task status, see [TODO.md](TODO.md).*
 
 ---
 
