@@ -2,7 +2,7 @@
 
 *This is a historical document capturing design decisions made at project inception.
 It is frozen. For current implementation state, see [LIVING_SPEC.md](LIVING_SPEC.md)
-and [../TODO.md](../TODO.md).*
+and [TODO.md](TODO.md).*
 
 ---
 
