@@ -137,6 +137,7 @@ func NewRoot(sourceDir string, opts Options) (*Root, error) {
 func (r *Root) OnAdd(ctx context.Context) {
 	entries, err := os.ReadDir(r.sourceDir)
 	if err != nil {
+		log.Printf("vfs: failed to read source directory %q: %v", r.sourceDir, err)
 		return
 	}
 	for _, e := range entries {

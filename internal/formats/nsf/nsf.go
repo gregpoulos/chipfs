@@ -89,9 +89,7 @@ func parseNSFe(data []byte) (*Header, error) {
 			if size < 9 {
 				return nil, fmt.Errorf("nsfe: INFO chunk too short: need at least 9 bytes, got %d", size)
 			}
-			if size >= 9 {
-				h.TrackCount = int(chunk[8])
-			}
+			h.TrackCount = int(chunk[8])
 			if size >= 10 {
 				h.FirstTrack = int(chunk[9]) + 1 // 0-indexed in file → 1-indexed in Header
 			} else {

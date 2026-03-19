@@ -5,11 +5,11 @@ ChipFS is a read-only FUSE filesystem that mounts a directory of chiptune files
 making classic video game music accessible to media servers like Navidrome.
 
 See [docs/LIVING_SPEC.md](docs/LIVING_SPEC.md) for architecture details and
-[TODO.md](TODO.md) for the current implementation phase.
+[docs/TODO.md](docs/TODO.md) for the current implementation phase.
 
 ## TDD Workflow
 
-Pick the next unchecked item in [TODO.md](TODO.md), write a failing test, implement the minimum to pass it, then run `/simplify`. Never write implementation code before a failing test exists.
+Pick the next unchecked item in [docs/TODO.md](docs/TODO.md), write a failing test, implement the minimum to pass it, then run `/simplify`. Never write implementation code before a failing test exists.
 
 Each format parser needs both synthetic-fixture tests and a real-file fixture test. Real files catch spec-vs-encoder divergence that synthetic fixtures miss — for example, real SPC files null-terminate duration fields while the spec implies space-padding.
 
