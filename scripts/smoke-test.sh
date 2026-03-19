@@ -61,13 +61,13 @@ trap cleanup EXIT
 
 echo "── 1. Root directory ────────────────────────────────────────────────────────"
 
-for f in pently.nsf ducktales.nsfe seaside-village.gbs ode-to-joy.spc; do
+for f in pently.nsf pently-demo.nsfe seaside-village.gbs ode-to-joy.spc; do
     [[ -f "$MOUNT/$f" ]] \
         && pass "real file '$f' present" \
         || fail "real file '$f' missing"
 done
 
-for d in pently ducktales seaside-village ode-to-joy; do
+for d in pently pently-demo seaside-village ode-to-joy; do
     [[ -d "$MOUNT/$d" ]] \
         && pass "virtual dir '$d/' present" \
         || fail "virtual dir '$d/' missing"
@@ -78,8 +78,8 @@ done
 echo ""
 echo "── 2. Track counts ──────────────────────────────────────────────────────────"
 
-check_eq "pently track count"            "$(ls "$MOUNT/pently"    | wc -l | tr -d ' ')" "24"
-check_eq "ducktales track count (plst)"  "$(ls "$MOUNT/ducktales" | wc -l | tr -d ' ')" "16"
+check_eq "pently track count"                 "$(ls "$MOUNT/pently"       | wc -l | tr -d ' ')" "24"
+check_eq "pently-demo track count (plst)"    "$(ls "$MOUNT/pently-demo"  | wc -l | tr -d ' ')" "10"
 check_eq "ode-to-joy track count (SPC)"  "$(ls "$MOUNT/ode-to-joy" | wc -l | tr -d ' ')" "1"
 check_eq "seaside-village track count (GBS)" "$(ls "$MOUNT/seaside-village" | wc -l | tr -d ' ')" "1"
 
@@ -114,8 +114,8 @@ probe() {
 # Primary: check raw header bytes (reliable, no render triggered).
 check_wav_bytes "pently album tag (bytes)"  "$MOUNT/pently/Track_01.wav"     "Pently demo"
 check_wav_bytes "pently artist tag (bytes)" "$MOUNT/pently/Track_01.wav"    "DJ Tepples"
-duck_first=$(ls "$MOUNT/ducktales" | head -1)
-check_wav_bytes "ducktales album tag (bytes)" "$MOUNT/ducktales/$duck_first" "DuckTales"
+pently_demo_first=$(ls "$MOUNT/pently-demo" | head -1)
+check_wav_bytes "pently-demo album tag (bytes)" "$MOUNT/pently-demo/$pently_demo_first" "Pently demo"
 ode_first=$(ls "$MOUNT/ode-to-joy" | head -1)
 check_wav_bytes "ode-to-joy title (bytes)"    "$MOUNT/ode-to-joy/$ode_first"   "Ode"
 
@@ -128,10 +128,10 @@ pently_probe=$(probe "$MOUNT/pently/Track_01.wav")
     && pass "pently artist tag (ffprobe)" \
     || fail "pently artist tag (ffprobe) — got: ${pently_probe:-<empty>}"
 
-duck_probe=$(probe "$MOUNT/ducktales/$duck_first")
-[[ "$duck_probe" == *"album=DuckTales"* ]] \
-    && pass "ducktales album tag (ffprobe)" \
-    || fail "ducktales album tag (ffprobe) — got: ${duck_probe:-<empty>}"
+pently_demo_probe=$(probe "$MOUNT/pently-demo/$pently_demo_first")
+[[ "$pently_demo_probe" == *"album=Pently demo"* ]] \
+    && pass "pently-demo album tag (ffprobe)" \
+    || fail "pently-demo album tag (ffprobe) — got: ${pently_demo_probe:-<empty>}"
 
 ode_probe=$(probe "$MOUNT/ode-to-joy/$ode_first")
 [[ "$ode_probe" == *"title=Ode To Joy"* ]] \

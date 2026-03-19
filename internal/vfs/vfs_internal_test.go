@@ -129,15 +129,15 @@ func TestBuildTrackList_Pently(t *testing.T) {
 	assert.Equal(t, "DJ Tepples", tracks[0].opts.Metadata.Artist)
 }
 
-func TestBuildTrackList_DuckTales(t *testing.T) {
-	tracks := buildTrackList("../../testdata/fixtures/ducktales.nsfe", 180_000, 8_000)
-	require.NotNil(t, tracks, "ducktales.nsfe must be recognised as a chiptune file")
+func TestBuildTrackList_PentlyNSFe(t *testing.T) {
+	tracks := buildTrackList("../../testdata/fixtures/pently-demo.nsfe", 180_000, 8_000)
+	require.NotNil(t, tracks, "pently-demo.nsfe must be recognised as a chiptune file")
 
-	// plst remapping: libgme reports 16 playlist entries.
-	assert.Equal(t, 16, len(tracks))
+	// plst remapping: 10 song tracks exposed, 15 sfx tracks hidden.
+	assert.Equal(t, 10, len(tracks))
 
 	// First track should have a real title from tlbl (not synthesised).
-	assert.NotEqual(t, "Track_01.wav", tracks[0].filename,
+	assert.Equal(t, "01 - Argument?.wav", tracks[0].filename,
 		"NSFe per-track titles should produce named filenames")
 }
 

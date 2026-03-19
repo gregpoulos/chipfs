@@ -83,3 +83,9 @@ This file tracks the current state of implementation. Update it as phases comple
 - N64/PSX/PS2 formats (emulation too slow for on-the-fly rendering)
 - Write support (ChipFS is intentionally read-only)
 - Windows support
+- Pre-built release binaries for Linux/arm64 (Raspberry Pi) — CGO dependency on
+  libgme complicates cross-compilation; build on-device or use Docker buildx with
+  an ARM sysroot; GitHub Actions matrix build is the right long-term solution
+- Live directory watching (`fsnotify`) — detect files added/removed after mount
+  and update the VFS tree without remounting; requires `sync.RWMutex` around the
+  track list and handling `Lookup` for directories that didn't exist at mount time

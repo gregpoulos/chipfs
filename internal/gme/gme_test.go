@@ -77,20 +77,21 @@ func TestPlay_ProducesNonZeroSamples(t *testing.T) {
 	assert.Greater(t, nonZero, 0, "Play must produce non-silent audio for a real track")
 }
 
-// TestTrackCount_DuckTales cross-validates our NSFe parser against libgme.
-// ducktales.nsfe has a plst chunk with 16 entries; libgme's TrackCount() returns
-// the playlist length (16), not the raw internal track count (45). Any code that
-// uses our Go parser's TrackCount must match this value.
-func TestTrackCount_DuckTales(t *testing.T) {
-	data, err := os.ReadFile("../../testdata/fixtures/ducktales.nsfe")
-	require.NoError(t, err, "testdata/fixtures/ducktales.nsfe must exist")
+// TestTrackCount_PentlyNSFe cross-validates our NSFe parser against libgme.
+// pently-demo.nsfe has a plst chunk with 10 entries (songs only, excluding 15 sfx
+// tracks); libgme's TrackCount() returns the playlist length (10), not the raw
+// internal track count (25). Any code that uses our Go parser's TrackCount must
+// match this value.
+func TestTrackCount_PentlyNSFe(t *testing.T) {
+	data, err := os.ReadFile("../../testdata/fixtures/pently-demo.nsfe")
+	require.NoError(t, err, "testdata/fixtures/pently-demo.nsfe must exist")
 
 	emu, err := gme.Open(data, 44100)
 	require.NoError(t, err)
 	defer emu.Close()
 
-	assert.Equal(t, 16, emu.TrackCount(),
-		"plst chunk has 16 entries; libgme TrackCount() must reflect playlist length")
+	assert.Equal(t, 10, emu.TrackCount(),
+		"plst chunk has 10 entries; libgme TrackCount() must reflect playlist length")
 }
 
 func TestTrackEnded_AfterFade(t *testing.T) {

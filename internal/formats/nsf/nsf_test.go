@@ -359,25 +359,24 @@ func TestParseNSFe_PlstShorterThanInternalCount(t *testing.T) {
 	assert.Equal(t, "E", h.Tracks[2].Title)
 }
 
-// TestParse_DuckTales tests against a real NSFe file to catch assumptions
-// that synthetic fixtures might not exercise.
-func TestParse_DuckTales(t *testing.T) {
-	data, err := os.ReadFile("../../../testdata/fixtures/ducktales.nsfe")
-	require.NoError(t, err, "testdata/fixtures/ducktales.nsfe must exist")
+// TestParse_PentlyNSFe tests against a real NSFe file derived from the Pently
+// demo (Damian Yerrick, zlib license) with a plst chunk added to expose only
+// the 10 song tracks (excluding 15 sound-effect tracks).
+func TestParse_PentlyNSFe(t *testing.T) {
+	data, err := os.ReadFile("../../../testdata/fixtures/pently-demo.nsfe")
+	require.NoError(t, err, "testdata/fixtures/pently-demo.nsfe must exist")
 
 	h, err := nsf.Parse(data)
 	require.NoError(t, err)
 
-	// plst has 16 entries; TrackCount must reflect playlist length, matching libgme.
-	assert.Equal(t, 16, h.TrackCount)
+	// plst has 10 entries; TrackCount must reflect playlist length, matching libgme.
+	assert.Equal(t, 10, h.TrackCount)
 	assert.Equal(t, 1, h.FirstTrack)
-	assert.Equal(t, "DuckTales", h.Title)
-	assert.Equal(t, "Hiroshige Tonomura, Yoshihiro Sakaguchi", h.Artist)
-	assert.Equal(t, "\xa91989 Capcom", h.Copyright)
+	assert.Equal(t, "Pently demo", h.Title)
+	assert.Equal(t, "DJ Tepples", h.Artist)
+	assert.Equal(t, "2019 Damian Yerrick", h.Copyright)
 
-	// Playlist slot 0 → internal track 0 (Title Screen / Ending theme)
+	// Playlist slot 0 → internal track 0 ("Argument?")
 	require.Greater(t, len(h.Tracks), 0)
-	assert.Equal(t, "Title Screen / Ending - Part 2 [DuckTales Theme]", h.Tracks[0].Title)
-	assert.Equal(t, 105_000, h.Tracks[0].DurationMs)
-	assert.Equal(t, 10_000, h.Tracks[0].FadeMs)
+	assert.Equal(t, "Argument?", h.Tracks[0].Title)
 }

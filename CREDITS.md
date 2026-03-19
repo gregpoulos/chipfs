@@ -2,11 +2,16 @@
 
 ## Test Fixtures
 
-### `testdata/fixtures/pently.nsf`
+### `testdata/fixtures/pently.nsf` and `testdata/fixtures/pently-demo.nsfe`
 
 "Pently demo" by Damian Yerrick (DJ Tepples), released under the
 [zlib license](https://github.com/pinobatch/pently/blob/master/LICENSE).
 Source: [pinobatch/pently](https://github.com/pinobatch/pently).
+
+`pently-demo.nsfe` is derived from the original by inserting a `plst` chunk
+that exposes only the 10 song tracks (excluding 15 sound-effect tracks). The
+original Pently build system does not emit `plst`; the chunk was added
+programmatically to exercise the NSFe playlist-remapping code path.
 
 ### `testdata/fixtures/seaside-village.gbs`
 
