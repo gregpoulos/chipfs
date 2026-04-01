@@ -115,6 +115,52 @@ go run ./cmd/render -file testdata/fixtures/pently.nsf -track 0 \
 Open the output file in any media player (QuickTime, VLC, etc.) to verify the
 audio sounds correct and metadata (title, artist, album) is populated.
 
+## Adding ChipFS to an Existing Navidrome Setup
+
+If you already have Navidrome running with a music library, there are two ways
+to add ChipFS alongside it.
+
+### Option A: separate library (Navidrome ≥ 0.58.0)
+
+Navidrome supports multiple libraries via **Settings → Libraries** in the admin
+UI. Mount ChipFS anywhere readable by the Navidrome process:
+
+```bash
+mkdir /mnt/chipfs
+./chipfs -source /path/to/your/chiptunes -mountpoint /mnt/chipfs -allow_other
+```
+
+If Navidrome is running in Docker, you must bind-mount the chipfs mountpoint
+into the container *before* adding the library in the UI — Navidrome can only
+select paths that are visible inside the container. Add a volume entry to your
+`docker-compose.yml`:
+
+```yaml
+volumes:
+  - "/mnt/chipfs:/chiptunes:ro"
+```
+
+Then restart the container and add the new library pointing at `/chiptunes`.
+
+### Option B: subdirectory of your existing music folder
+
+Mount ChipFS as a subdirectory inside the folder Navidrome already scans:
+
+```bash
+mkdir /mnt/music/chiptunes
+./chipfs -source /path/to/your/chiptunes -mountpoint /mnt/music/chiptunes -allow_other
+```
+
+Navidrome will pick up `/mnt/music/chiptunes` automatically on the next scan —
+no library or Docker config changes needed.
+
+In both cases you'll need `-allow_other` (and `user_allow_other` in
+`/etc/fuse.conf`) if Navidrome runs as a different user or inside Docker, as
+described in [Using with Navidrome in Docker](#using-with-navidrome-in-docker).
+
+Because ChipFS takes a static snapshot at mount time, adding chiptune files
+later requires remounting ChipFS and triggering a Navidrome rescan.
+
 ## Docker
 
 ### Smoke test
