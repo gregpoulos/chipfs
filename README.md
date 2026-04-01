@@ -26,7 +26,7 @@ go build -o chipfs ./cmd/chipfs
 
 ```bash
 mkdir /mnt/chipfs
-./chipfs -source /path/to/your/chiptunes -mountpoint /mnt/chipfs
+./chipfs -source <SOURCE_DIR> -mountpoint /mnt/chipfs
 ```
 
 Point Navidrome's music directory at `/mnt/chipfs`.
@@ -64,7 +64,7 @@ enabled in `/etc/fuse.conf`:
 sudo sed -i 's/#user_allow_other/user_allow_other/' /etc/fuse.conf
 
 # Then mount with:
-./chipfs -source /path/to/chiptunes -mountpoint /mnt/chipfs -allow_other
+./chipfs -source <SOURCE_DIR> -mountpoint /mnt/chipfs -allow_other
 ```
 
 In your Navidrome Docker Compose, bind-mount the chipfs directory:
@@ -127,7 +127,7 @@ UI. Mount ChipFS anywhere readable by the Navidrome process:
 
 ```bash
 mkdir /mnt/chipfs
-./chipfs -source /path/to/your/chiptunes -mountpoint /mnt/chipfs -allow_other
+./chipfs -source <SOURCE_DIR> -mountpoint /mnt/chipfs -allow_other
 ```
 
 If Navidrome is running in Docker, you must bind-mount the chipfs mountpoint
@@ -148,7 +148,7 @@ Mount ChipFS as a subdirectory inside the folder Navidrome already scans:
 
 ```bash
 mkdir /mnt/music/chiptunes
-./chipfs -source /path/to/your/chiptunes -mountpoint /mnt/music/chiptunes -allow_other
+./chipfs -source <SOURCE_DIR> -mountpoint /mnt/music/chiptunes -allow_other
 ```
 
 Navidrome will pick up `/mnt/music/chiptunes` automatically on the next scan —
@@ -166,24 +166,44 @@ later requires remounting ChipFS and triggering a Navidrome rescan.
 For a production setup you'll want chipfs to start at boot and survive SSH
 disconnections. Create a unit file:
 
+Replace the values in angle brackets before saving the file:
+
+| Placeholder | What to put |
+|---|---|
+| `<CHIPFS_BINARY>` | Absolute path to the `chipfs` binary, e.g. `/home/gap/chipfs/chipfs` |
+| `<SOURCE_DIR>` | Absolute path to your chiptune files, e.g. `"/mnt/nas/Games/Chiptunes"` — **quote it** if the path contains spaces |
+| `<AFTER>` | `local-fs.target` for local paths; the mount unit (e.g. `mnt-nas.mount`) if the source is a network share |
+
 ```ini
 # /etc/systemd/system/chipfs.service
 [Unit]
 Description=ChipFS chiptune FUSE filesystem
-After=local-fs.target
+After=<AFTER>
+# If using a network share, also add:
+# Requires=<AFTER>
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/chipfs \
-    -source /path/to/your/chiptunes \
+ExecStartPre=mkdir -p /mnt/chipfs
+ExecStart=<CHIPFS_BINARY> \
+    -source <SOURCE_DIR> \
     -mountpoint /mnt/chipfs \
     -allow_other
-ExecStop=/bin/fusermount -u /mnt/chipfs
+ExecStop=fusermount3 -u /mnt/chipfs
 Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
 ```
+
+The `<AFTER>` mount unit name for a path like `/mnt/navidrome` is typically
+`mnt-navidrome.mount` — run `systemctl list-units --type=mount` to find the
+exact name. Adding `Requires=` ensures chipfs stops cleanly if the underlying
+mount disappears.
+
+> **Note:** Systemd does not interpret shell escapes in `ExecStart` — use
+> double quotes for paths with spaces, not backslashes.
+> On older systems (pre-FUSE3) replace `fusermount3` with `fusermount`.
 
 Then enable and start it:
 
