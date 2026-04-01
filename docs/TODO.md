@@ -75,6 +75,15 @@ This file tracks the current state of implementation. Update it as phases comple
 - [x] `-cache_size_mb` — LRU cache capacity in MB (default 256; converts to bytes in
       `vfs.Options.CacheBytes`)
 
+## Phase 10: Cover Art Passthrough
+
+- [ ] `internal/vfs` — `ChipDir`: expose `cover.jpg` / `cover.png` / `folder.jpg`
+      from the source directory as passthrough `RealFile` nodes alongside the WAV tracks
+- [ ] `internal/vfs` — `Root`: likewise expose cover art files that sit next to a
+      chiptune file, scoped to the `ChipDir` virtual folder for that file
+- [ ] Smoke test — verify cover art file is present and readable in mounted virtual dir
+- [ ] Confirm Navidrome picks up `cover.jpg` from the virtual album folder
+
 ## Deferred / Out of Scope for v1
 
 - Stress test with `fsstress` (Linux kernel tool) — useful but requires a dedicated Linux setup
