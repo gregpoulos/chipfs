@@ -161,6 +161,41 @@ described in [Using with Navidrome in Docker](#using-with-navidrome-in-docker).
 Because ChipFS takes a static snapshot at mount time, adding chiptune files
 later requires remounting ChipFS and triggering a Navidrome rescan.
 
+### Running ChipFS as a systemd service
+
+For a production setup you'll want chipfs to start at boot and survive SSH
+disconnections. Create a unit file:
+
+```ini
+# /etc/systemd/system/chipfs.service
+[Unit]
+Description=ChipFS chiptune FUSE filesystem
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/chipfs \
+    -source /path/to/your/chiptunes \
+    -mountpoint /mnt/chipfs \
+    -allow_other
+ExecStop=/bin/fusermount -u /mnt/chipfs
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then enable and start it:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now chipfs
+sudo systemctl status chipfs
+```
+
+`Restart=on-failure` will automatically bring chipfs back up if it crashes.
+`ExecStop` ensures the mountpoint is cleanly unmounted on `systemctl stop`.
+
 ## Docker
 
 ### Smoke test
