@@ -71,7 +71,7 @@ In your Navidrome Docker Compose, bind-mount the chipfs directory:
 
 ```yaml
 volumes:
-  - /mnt/chipfs:/music:ro
+  - /mnt/chipfs:/chiptunes:ro
 ```
 
 ## Behaviour Notes
