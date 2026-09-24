@@ -7,7 +7,8 @@
 //
 // # Virtual Directory Structure
 //
-// For each chiptune file foo.nsf in the source directory, ChipFS presents:
+// For each chiptune file foo.nsf in the source tree (at any depth), ChipFS
+// presents, in the same directory:
 //
 //	foo.nsf           (passthrough read of the real file)
 //	foo/              (virtual directory, one entry per track)
@@ -24,7 +25,8 @@
 //
 // # Node Types
 //
-//   - Root:      top-level node; lists source dir contents + virtual siblings
+//   - Root:      top-level node; mirrors the source tree + virtual siblings
+//   - SourceDir: mirror of a real subdirectory of the source tree
 //   - RealFile:  passthrough read of a real file on disk
 //   - ChipDir:   virtual directory for one chiptune file; populated in OnAdd
 //   - TrackFile: virtual WAV file for one track; lazy emulation on Read
@@ -130,31 +132,46 @@ func NewRoot(sourceDir string, opts Options) (*Root, error) {
 }
 
 // OnAdd is called by go-fuse when the root inode is initialized (at mount
-// time). It scans the source directory and populates the virtual tree.
+// time). It scans the source directory tree and populates the virtual tree.
 //
 // The tree is a static snapshot: files added to the source directory after
 // mounting are not visible until chipfs is restarted.
 func (r *Root) OnAdd(ctx context.Context) {
-	entries, err := os.ReadDir(r.sourceDir)
+	r.populate(ctx, &r.Inode, r.sourceDir)
+}
+
+// populate mirrors dir into parent: regular files become passthrough nodes
+// (plus a virtual ChipDir for recognized chiptunes) and subdirectories become
+// SourceDir nodes that are populated recursively.
+func (r *Root) populate(ctx context.Context, parent *fs.Inode, dir string) {
+	entries, err := os.ReadDir(dir)
 	if err != nil {
-		log.Printf("vfs: failed to read source directory %q: %v", r.sourceDir, err)
+		log.Printf("vfs: failed to read source directory %q: %v", dir, err)
 		return
 	}
 	for _, e := range entries {
-		// Only expose regular files. Symlinks are skipped deliberately: a
-		// symlink pointing outside the source directory (e.g. to /etc/shadow)
-		// would be followed transparently by RealFile, bypassing the source
-		// directory boundary. Devices, pipes, and sockets are also skipped.
+		name := e.Name()
+		fullPath := filepath.Join(dir, name)
+
+		// Symlinks are skipped deliberately: a symlink pointing outside the
+		// source directory (e.g. to /etc/shadow) would be followed
+		// transparently, bypassing the source directory boundary. This
+		// covers symlinked directories too, and also rules out cycles.
+		// Devices, pipes, and sockets are also skipped.
+		if e.IsDir() {
+			sub := parent.NewPersistentInode(ctx, &SourceDir{}, fs.StableAttr{Mode: syscall.S_IFDIR})
+			parent.AddChild(name, sub, false)
+			r.populate(ctx, sub, fullPath)
+			continue
+		}
 		if !e.Type().IsRegular() {
 			continue
 		}
-		name := e.Name()
-		fullPath := filepath.Join(r.sourceDir, name)
 
 		// Expose the real file as a passthrough node.
 		rf := &RealFile{path: fullPath}
-		rfInode := r.NewPersistentInode(ctx, rf, fs.StableAttr{Mode: syscall.S_IFREG})
-		r.AddChild(name, rfInode, false)
+		rfInode := parent.NewPersistentInode(ctx, rf, fs.StableAttr{Mode: syscall.S_IFREG})
+		parent.AddChild(name, rfInode, false)
 
 		// For recognized chiptune files, also add a virtual ChipDir.
 		tracks := buildTrackList(fullPath, r.defaultPlayMs, r.defaultFadeMs)
@@ -162,15 +179,32 @@ func (r *Root) OnAdd(ctx context.Context) {
 			continue
 		}
 		stem := strings.TrimSuffix(name, filepath.Ext(name))
-		dir := &ChipDir{
+		chipDir := &ChipDir{
 			sourcePath: fullPath,
 			tracks:     tracks,
 			cache:      r.cache,
 			sf:         r.sf,
 		}
-		dirInode := r.NewPersistentInode(ctx, dir, fs.StableAttr{Mode: syscall.S_IFDIR})
-		r.AddChild(stem, dirInode, false)
+		dirInode := parent.NewPersistentInode(ctx, chipDir, fs.StableAttr{Mode: syscall.S_IFDIR})
+		parent.AddChild(stem, dirInode, false)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// SourceDir
+// ---------------------------------------------------------------------------
+
+// SourceDir mirrors a real subdirectory of the source tree. Its children are
+// added by Root.populate at mount time.
+type SourceDir struct {
+	fs.Inode
+}
+
+var _ fs.NodeGetattrer = (*SourceDir)(nil)
+
+func (d *SourceDir) Getattr(_ context.Context, _ fs.FileHandle, out *gofuse.AttrOut) syscall.Errno {
+	out.Mode = syscall.S_IFDIR | 0555
+	return 0
 }
 
 // ---------------------------------------------------------------------------

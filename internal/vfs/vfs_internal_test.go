@@ -12,6 +12,7 @@ import (
 
 	"github.com/gregpoulos/chipfs/internal/cache"
 	"github.com/gregpoulos/chipfs/internal/wav"
+	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -327,4 +328,43 @@ func TestRealFileHandle_Release_ClosesFile(t *testing.T) {
 	dest := make([]byte, 4)
 	_, readErr := of.ReadAt(dest, 0)
 	assert.Error(t, readErr, "file must be closed after Release")
+}
+
+// copyFixture copies a testdata fixture to dst, creating parent directories.
+func copyFixture(t *testing.T, name, dst string) {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("../../testdata/fixtures", name))
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(dst), 0o755))
+	require.NoError(t, os.WriteFile(dst, data, 0o644))
+}
+
+// TestRoot_OnAdd_DescendsIntoSubdirectories verifies the source tree is
+// mirrored: chiptune files in nested folders get a passthrough file and a
+// virtual track directory beside them, and symlinked directories are skipped.
+func TestRoot_OnAdd_DescendsIntoSubdirectories(t *testing.T) {
+	src := t.TempDir()
+	copyFixture(t, "pently.nsf", filepath.Join(src, "pently.nsf"))
+	copyFixture(t, "ode-to-joy.spc", filepath.Join(src, "SNES", "Game", "ode.spc"))
+
+	outside := t.TempDir()
+	copyFixture(t, "pently.nsf", filepath.Join(outside, "secret.nsf"))
+	require.NoError(t, os.Symlink(outside, filepath.Join(src, "linked")))
+
+	root, err := NewRoot(src, Options{})
+	require.NoError(t, err)
+	fs.NewNodeFS(root, &fs.Options{}) // runs Root.OnAdd without a kernel mount
+
+	assert.NotNil(t, root.GetChild("pently"), "top-level virtual dir must still exist")
+
+	snes := root.GetChild("SNES")
+	require.NotNil(t, snes, "subdirectory must be mirrored")
+	game := snes.GetChild("Game")
+	require.NotNil(t, game, "nested subdirectory must be mirrored")
+	assert.NotNil(t, game.GetChild("ode.spc"), "passthrough file must appear in subdirectory")
+	tracks := game.GetChild("ode")
+	require.NotNil(t, tracks, "virtual track dir must appear beside nested file")
+	assert.NotEmpty(t, tracks.Children(), "nested virtual dir must contain tracks")
+
+	assert.Nil(t, root.GetChild("linked"), "symlinked directories must be skipped")
 }

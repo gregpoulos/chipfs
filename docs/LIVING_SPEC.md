@@ -105,12 +105,17 @@ comments prematurely close the enclosing Go block comment.
 
 FUSE node implementations using `hanwen/go-fuse/v2`'s `NodeFS` API.
 
-- **`Root`:** Top-level node. `OnAdd` scans the source directory **once at mount
-  time** and builds a static inode tree; new files added to the source directory
-  after mounting are not visible until chipfs is restarted. Only regular files
-  are exposed — symlinks, devices, and other special files are silently skipped
-  to prevent a symlink from escaping the source directory boundary. go-fuse
+- **`Root`:** Top-level node. `OnAdd` scans the source directory tree
+  **recursively, once at mount time** and builds a static inode tree that
+  mirrors the source layout; new files added to the source directory after
+  mounting are not visible until chipfs is restarted. Only regular files and
+  real directories are exposed — symlinks (including symlinked directories),
+  devices, and other special files are silently skipped to prevent a symlink
+  from escaping the source directory boundary or forming a cycle. go-fuse
   handles `Readdir`/`Lookup` automatically from the pre-populated tree.
+- **`SourceDir`:** Mirror of a real subdirectory. Populated by `Root` during
+  the same scan; recognized chiptune files inside it get a passthrough file and
+  a virtual `ChipDir` sibling exactly as at the top level.
 - **`RealFile`:** Passthrough read of the original chiptune file on disk.
   `Open` opens an `*os.File` and returns a `realFileHandle` that holds it for
   the lifetime of the open/release pair; go-fuse dispatches reads to the handle's
