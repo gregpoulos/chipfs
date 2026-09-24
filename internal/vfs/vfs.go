@@ -318,6 +318,7 @@ func buildTrackList(path string, defaultPlayMs, defaultFadeMs int) []trackEntry 
 	case ".nsf", ".nsfe":
 		h, err := nsfFmt.Parse(data)
 		if err != nil {
+			log.Printf("vfs: skipping %q: %v", path, err)
 			return nil
 		}
 		entries := make([]trackEntry, 0, h.TrackCount)
@@ -358,6 +359,7 @@ func buildTrackList(path string, defaultPlayMs, defaultFadeMs int) []trackEntry 
 	case ".gbs":
 		h, err := gbsFmt.Parse(data)
 		if err != nil {
+			log.Printf("vfs: skipping %q: %v", path, err)
 			return nil
 		}
 		entries := make([]trackEntry, 0, h.TrackCount)
@@ -384,6 +386,7 @@ func buildTrackList(path string, defaultPlayMs, defaultFadeMs int) []trackEntry 
 	case ".spc":
 		h, err := spcFmt.Parse(data)
 		if err != nil {
+			log.Printf("vfs: skipping %q: %v", path, err)
 			return nil
 		}
 		title := h.SongTitle

@@ -19,8 +19,14 @@ import (
 // ErrInvalidMagic is returned when the data does not begin with the SPC magic string.
 var ErrInvalidMagic = errors.New("not a valid SPC file: invalid magic bytes")
 
-// spcMagic is the 33-byte ASCII string that begins every valid SPC file.
-const spcMagic = "SNES-SPC700 Sound File Data v0.30"
+// spcMagic is the ASCII prefix of every valid SPC file. Rips in the wild carry
+// varying version suffixes (v0.10, v0.30, v0.31, ...) after it; libgme accepts
+// any "v0." version, so Parse does too rather than dropping older files.
+const spcMagic = "SNES-SPC700 Sound File Data v0."
+
+// minHeaderLen is the length of the magic string plus its two-character
+// version suffix.
+const minHeaderLen = 33
 
 // Header contains the parsed ID666 tag metadata from an SPC file.
 type Header struct {
@@ -35,7 +41,7 @@ type Header struct {
 
 // Parse parses an SPC file from raw bytes and returns its ID666 tag metadata.
 func Parse(data []byte) (*Header, error) {
-	if len(data) < 33 || !bytes.Equal(data[0:33], []byte(spcMagic)) {
+	if len(data) < minHeaderLen || !bytes.HasPrefix(data, []byte(spcMagic)) {
 		return nil, ErrInvalidMagic
 	}
 	if len(data) < 0xD2 {

@@ -61,6 +61,19 @@ func TestParse_RejectsInvalidMagic(t *testing.T) {
 	assert.ErrorIs(t, err, spc.ErrInvalidMagic)
 }
 
+// Older rips carry other v0.x version strings (e.g. v0.10); libgme accepts any
+// "v0." header, so Parse must too or those files are silently dropped.
+func TestParse_AcceptsOlderVersionStrings(t *testing.T) {
+	for _, ver := range []string{"v0.10", "v0.31"} {
+		data := makeSPC("Title", "Game", "Artist", 120, 8000)
+		copy(data[28:33], ver)
+
+		h, err := spc.Parse(data)
+		require.NoError(t, err, ver)
+		assert.Equal(t, "Title", h.SongTitle, ver)
+	}
+}
+
 func TestParse_RejectsTooShort(t *testing.T) {
 	_, err := spc.Parse([]byte("SNES-SPC700"))
 	assert.Error(t, err)

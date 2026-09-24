@@ -66,7 +66,7 @@ playlist position) is consistent with what libgme reports.
   including per-track titles (`tlbl`), durations (`time`), and fade lengths (`fade`).
 - **GBS:** 0x70-byte header. Same structure as NSF: global metadata, track count,
   no per-track information.
-- **SPC:** 33-byte magic + ID666 tag block at fixed offsets. One track per file.
+- **SPC:** 33-byte magic (`SNES-SPC700 Sound File Data v0.` plus any two-character version, e.g. `10`, `30`; matches libgme) + ID666 tag block at fixed offsets. One track per file.
   Provides song title, game title, artist, and an explicit play duration in seconds.
 
 ### `internal/wav`
