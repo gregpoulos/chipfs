@@ -14,12 +14,15 @@ import (
 
 // Metadata holds the tag information to embed in the WAV file.
 type Metadata struct {
-	Title   string
-	Artist  string
-	Album   string
-	Track   int
-	Year    string
-	Comment string
+	Title  string
+	Artist string
+	Album  string
+	// AlbumArtist (ID3 TPE2) groups tracks into one album when their per-track
+	// artists differ. Omitted from the tag when empty.
+	AlbumArtist string
+	Track       int
+	Year        string
+	Comment     string
 }
 
 // Options configures WAV encoding parameters.
@@ -215,6 +218,7 @@ func buildID3v2(meta Metadata) []byte {
 	frames = append(frames, textFrame("TIT2", meta.Title)...)
 	frames = append(frames, textFrame("TPE1", meta.Artist)...)
 	frames = append(frames, textFrame("TALB", meta.Album)...)
+	frames = append(frames, textFrame("TPE2", meta.AlbumArtist)...)
 	if meta.Track > 0 {
 		frames = append(frames, textFrame("TRCK", strconv.Itoa(meta.Track))...)
 	}

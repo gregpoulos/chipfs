@@ -266,3 +266,31 @@ func TestHeaderBytes_IsExactPrefixOfEncode(t *testing.T) {
 	assert.Equal(t, int64(len(header)), wav.EstimatedSize(durationMs, opts)-int64(sampleCount*2),
 		"header length must equal EstimatedSize minus PCM bytes")
 }
+
+func TestEncode_AlbumArtistWritesTPE2AndKeepsSizeExact(t *testing.T) {
+	const durationMs = 2_000
+	opts := wav.Options{
+		SampleRate: 44100,
+		Channels:   2,
+		Metadata:   wav.Metadata{Title: "Frog's Theme", Artist: "Uematsu", AlbumArtist: "Mitsuda", Album: "Chrono Trigger", Track: 1},
+	}
+	sampleCount := (durationMs * opts.SampleRate / 1000) * opts.Channels
+	out, err := wav.Encode(make([]int16, sampleCount), opts)
+	require.NoError(t, err)
+
+	id3Size := int(binary.LittleEndian.Uint32(out[40:44]))
+	id3Bytes := string(out[44 : 44+id3Size])
+	assert.Contains(t, id3Bytes, "TPE2")
+	assert.Contains(t, id3Bytes, "Mitsuda")
+	assert.Contains(t, id3Bytes, "TPE1", "track artist must remain")
+	assert.Contains(t, id3Bytes, "Uematsu")
+
+	assert.Equal(t, int64(len(out)), wav.EstimatedSize(durationMs, opts))
+	assert.Equal(t, out[:len(wav.HeaderBytes(durationMs, opts))], wav.HeaderBytes(durationMs, opts))
+}
+
+func TestEncode_EmptyAlbumArtistOmitsTPE2(t *testing.T) {
+	out, err := wav.Encode(nil, wav.Options{SampleRate: 44100, Channels: 2, Metadata: wav.Metadata{Title: "x", Artist: "y"}})
+	require.NoError(t, err)
+	assert.NotContains(t, string(out), "TPE2")
+}
