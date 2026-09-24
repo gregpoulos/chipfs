@@ -9,10 +9,12 @@ import (
 	"sync"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/gregpoulos/chipfs/internal/cache"
 	"github.com/gregpoulos/chipfs/internal/wav"
 	"github.com/hanwen/go-fuse/v2/fs"
+	gofuse "github.com/hanwen/go-fuse/v2/fuse"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -377,4 +379,50 @@ func TestFitSamples(t *testing.T) {
 	assert.Equal(t, []int16{1, 2, 3}, fitSamples([]int16{1, 2, 3}, 3), "exact output is unchanged")
 	assert.Equal(t, []int16{1, 2, 0, 0}, fitSamples([]int16{1, 2}, 4), "short output is zero-padded")
 	assert.Equal(t, []int16{0, 0}, fitSamples(nil, 2), "empty output is all silence")
+}
+
+// TestGetattr_ReportsSourceTimestamps verifies every node reports the source's
+// modification time rather than the zero epoch. Navidrome embeds the media
+// file's mtime in stream tokens and rejects a zero value as a missing source
+// timestamp (HTTP 410).
+func TestGetattr_ReportsSourceTimestamps(t *testing.T) {
+	src := t.TempDir()
+	nsf := filepath.Join(src, "pently.nsf")
+	copyFixture(t, "pently.nsf", nsf)
+	copyFixture(t, "ode-to-joy.spc", filepath.Join(src, "SNES", "ode.spc"))
+
+	fileTime := time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
+	dirTime := time.Date(2021, 6, 7, 8, 9, 10, 0, time.UTC)
+	require.NoError(t, os.Chtimes(nsf, fileTime, fileTime))
+	require.NoError(t, os.Chtimes(filepath.Join(src, "SNES"), dirTime, dirTime))
+	require.NoError(t, os.Chtimes(src, dirTime, dirTime))
+
+	root, err := NewRoot(src, Options{})
+	require.NoError(t, err)
+	fs.NewNodeFS(root, &fs.Options{})
+
+	attr := func(in *fs.Inode) gofuse.AttrOut {
+		t.Helper()
+		require.NotNil(t, in)
+		var out gofuse.AttrOut
+		errno := in.Operations().(fs.NodeGetattrer).Getattr(context.Background(), nil, &out)
+		require.Equal(t, syscall.Errno(0), errno)
+		return out
+	}
+	assertTimes := func(name string, out gofuse.AttrOut, want time.Time) {
+		t.Helper()
+		assert.Equal(t, uint64(want.Unix()), out.Mtime, name+" mtime")
+		assert.Equal(t, uint64(want.Unix()), out.Ctime, name+" ctime")
+		assert.Equal(t, uint64(want.Unix()), out.Atime, name+" atime")
+	}
+
+	chipDir := root.GetChild("pently")
+	require.NotNil(t, chipDir)
+	track := chipDir.GetChild("Track_01.wav")
+
+	assertTimes("root", attr(&root.Inode), dirTime)
+	assertTimes("real file", attr(root.GetChild("pently.nsf")), fileTime)
+	assertTimes("chip dir", attr(chipDir), fileTime)
+	assertTimes("track file", attr(track), fileTime)
+	assertTimes("source dir", attr(root.GetChild("SNES")), dirTime)
 }

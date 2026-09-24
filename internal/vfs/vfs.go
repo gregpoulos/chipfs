@@ -41,6 +41,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/gregpoulos/chipfs/internal/cache"
 	gbsFmt "github.com/gregpoulos/chipfs/internal/formats/gbs"
@@ -110,6 +111,16 @@ type Root struct {
 }
 
 var _ fs.NodeOnAdder = (*Root)(nil)
+var _ fs.NodeGetattrer = (*Root)(nil)
+
+// Getattr reports the source directory's timestamps; see setTimes.
+func (r *Root) Getattr(_ context.Context, _ fs.FileHandle, out *gofuse.AttrOut) syscall.Errno {
+	out.Mode = syscall.S_IFDIR | 0555
+	if st, err := os.Stat(r.sourceDir); err == nil {
+		setTimes(&out.Attr, st.ModTime())
+	}
+	return 0
+}
 
 // NewRoot creates a Root node backed by the given source directory.
 // Zero-valued fields in opts are replaced with built-in defaults.
@@ -159,7 +170,7 @@ func (r *Root) populate(ctx context.Context, parent *fs.Inode, dir string) {
 		// covers symlinked directories too, and also rules out cycles.
 		// Devices, pipes, and sockets are also skipped.
 		if e.IsDir() {
-			sub := parent.NewPersistentInode(ctx, &SourceDir{}, fs.StableAttr{Mode: syscall.S_IFDIR})
+			sub := parent.NewPersistentInode(ctx, &SourceDir{mtime: entryMtime(e)}, fs.StableAttr{Mode: syscall.S_IFDIR})
 			parent.AddChild(name, sub, false)
 			r.populate(ctx, sub, fullPath)
 			continue
@@ -181,6 +192,7 @@ func (r *Root) populate(ctx context.Context, parent *fs.Inode, dir string) {
 		stem := strings.TrimSuffix(name, filepath.Ext(name))
 		chipDir := &ChipDir{
 			sourcePath: fullPath,
+			mtime:      entryMtime(e),
 			tracks:     tracks,
 			cache:      r.cache,
 			sf:         r.sf,
@@ -198,12 +210,14 @@ func (r *Root) populate(ctx context.Context, parent *fs.Inode, dir string) {
 // added by Root.populate at mount time.
 type SourceDir struct {
 	fs.Inode
+	mtime time.Time
 }
 
 var _ fs.NodeGetattrer = (*SourceDir)(nil)
 
 func (d *SourceDir) Getattr(_ context.Context, _ fs.FileHandle, out *gofuse.AttrOut) syscall.Errno {
 	out.Mode = syscall.S_IFDIR | 0555
+	setTimes(&out.Attr, d.mtime)
 	return 0
 }
 
@@ -240,6 +254,7 @@ func (f *RealFile) Getattr(_ context.Context, _ fs.FileHandle, out *gofuse.AttrO
 	}
 	out.Mode = syscall.S_IFREG | 0444
 	out.Size = uint64(st.Size())
+	setTimes(&out.Attr, st.ModTime())
 	return 0
 }
 
@@ -448,6 +463,7 @@ func sanitizeFilename(s string) string {
 type ChipDir struct {
 	fs.Inode
 	sourcePath string
+	mtime      time.Time // source file's mtime, reported for the dir and its tracks
 	tracks     []trackEntry
 	cache      *cache.Cache
 	sf         *singleflight.Group
@@ -458,6 +474,7 @@ var _ fs.NodeGetattrer = (*ChipDir)(nil)
 
 func (d *ChipDir) Getattr(_ context.Context, _ fs.FileHandle, out *gofuse.AttrOut) syscall.Errno {
 	out.Mode = syscall.S_IFDIR | 0555
+	setTimes(&out.Attr, d.mtime)
 	return 0
 }
 
@@ -466,6 +483,7 @@ func (d *ChipDir) OnAdd(ctx context.Context) {
 		totalMs := t.totalMs()
 		tf := &TrackFile{
 			sourcePath:    d.sourcePath,
+			mtime:         d.mtime,
 			trackIdx:      t.trackIdx,
 			playMs:        t.playMs,
 			fadeMs:        t.fadeMs,
@@ -493,6 +511,7 @@ func (d *ChipDir) OnAdd(ctx context.Context) {
 type TrackFile struct {
 	fs.Inode
 	sourcePath    string
+	mtime         time.Time // source file's mtime
 	trackIdx      int
 	playMs        int
 	fadeMs        int
@@ -517,6 +536,7 @@ func (f *TrackFile) Open(_ context.Context, _ uint32) (fs.FileHandle, uint32, sy
 func (f *TrackFile) Getattr(_ context.Context, _ fs.FileHandle, out *gofuse.AttrOut) syscall.Errno {
 	out.Mode = syscall.S_IFREG | 0444
 	out.Size = uint64(f.estimatedSize)
+	setTimes(&out.Attr, f.mtime)
 	return 0
 }
 
@@ -634,6 +654,27 @@ func fitSamples(samples []int16, n int) []int16 {
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
+
+// setTimes reports t as the atime, mtime, and ctime of a node. Virtual nodes
+// mirror their source's mtime: Navidrome embeds the media file's mtime in
+// stream tokens and rejects a zero (1970) value as a missing source timestamp,
+// and using the source's time also lets clients notice when the source changes.
+// A zero t leaves the times unset.
+func setTimes(a *gofuse.Attr, t time.Time) {
+	if t.IsZero() {
+		return
+	}
+	a.SetTimes(&t, &t, &t)
+}
+
+// entryMtime returns e's modification time, or the zero time if unavailable.
+func entryMtime(e os.DirEntry) time.Time {
+	info, err := e.Info()
+	if err != nil {
+		return time.Time{}
+	}
+	return info.ModTime()
+}
 
 // clampMs returns ms if it is in (0, maxMs]; returns defaultMs if ms <= 0;
 // returns maxMs if ms > maxMs.
