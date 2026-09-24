@@ -616,15 +616,19 @@ func (f *TrackFile) renderTrack() ([]byte, error) {
 		allSamples = append(allSamples, chunk...)
 	}
 
-	// Trim to the expected sample count so the output size matches EstimatedSize
-	// exactly. The render loop reads in 4096-sample chunks and may overshoot by
-	// up to one chunk of silence past the fade end.
 	expectedSamples := ((f.playMs + f.fadeMs) * sr / 1000) * ch
-	if len(allSamples) > expectedSamples {
-		allSamples = allSamples[:expectedSamples]
-	}
+	return wav.Encode(fitSamples(allSamples, expectedSamples), f.opts)
+}
 
-	return wav.Encode(allSamples, f.opts)
+// fitSamples forces samples to exactly n values so the rendered WAV size
+// matches EstimatedSize, which getattr has already reported to the client.
+// The render loop reads in 4096-sample chunks and may overshoot the fade end
+// (trimmed here), and libgme may end a track early on silence (zero-padded).
+func fitSamples(samples []int16, n int) []int16 {
+	if len(samples) >= n {
+		return samples[:n]
+	}
+	return append(samples, make([]int16, n-len(samples))...)
 }
 
 // ---------------------------------------------------------------------------

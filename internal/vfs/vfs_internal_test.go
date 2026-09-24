@@ -368,3 +368,13 @@ func TestRoot_OnAdd_DescendsIntoSubdirectories(t *testing.T) {
 
 	assert.Nil(t, root.GetChild("linked"), "symlinked directories must be skipped")
 }
+
+// TestFitSamples verifies rendered audio is forced to exactly the expected
+// length: long output is trimmed and short output (libgme ending a track early
+// on silence) is zero-padded, so the bytes served always match EstimatedSize.
+func TestFitSamples(t *testing.T) {
+	assert.Equal(t, []int16{1, 2}, fitSamples([]int16{1, 2, 3, 4}, 2), "long output is trimmed")
+	assert.Equal(t, []int16{1, 2, 3}, fitSamples([]int16{1, 2, 3}, 3), "exact output is unchanged")
+	assert.Equal(t, []int16{1, 2, 0, 0}, fitSamples([]int16{1, 2}, 4), "short output is zero-padded")
+	assert.Equal(t, []int16{0, 0}, fitSamples(nil, 2), "empty output is all silence")
+}
