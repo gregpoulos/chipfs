@@ -10,9 +10,9 @@ jobs:
     name: Unit tests (macOS)
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
 
@@ -27,7 +27,7 @@ jobs:
     if: false  # requires a self-hosted runner with FUSE support; skipped in GitHub CI
     runs-on: [self-hosted, fuse]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build smoke-test image
         run: docker build --target smoke-test -t chipfs-smoke .
