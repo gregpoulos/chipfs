@@ -136,6 +136,11 @@ Entry point. Parses `-source`, `-mountpoint`, `-allow_other`, `-default_length`,
 `-fade_length`, and `-cache_size_mb` flags, creates a `vfs.Root`, mounts via
 `fs.Mount`, and blocks until SIGINT or SIGTERM (which triggers a clean unmount).
 
+Mounts set go-fuse's `DirectMount`: root calls `mount(2)` itself and falls back
+to `fusermount3` on failure. This exists because Ubuntu's `fusermount3`
+AppArmor profile revokes inherited file descriptors inside LXC, which breaks
+the helper's socket handshake with go-fuse.
+
 ### `cmd/render`
 
 Developer utility for manual integration testing. Renders a single track from a

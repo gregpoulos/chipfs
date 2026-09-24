@@ -58,6 +58,16 @@ func main() {
 	}
 }
 
+func fuseMountOptions(cfg config) gofuse.MountOptions {
+	return gofuse.MountOptions{
+		AllowOther: cfg.allowOther,
+		// Root mounts via mount(2) directly, avoiding fusermount3, which
+		// Ubuntu's AppArmor profile breaks inside LXC. Falls back to
+		// fusermount3 if the direct mount fails (non-root, macOS).
+		DirectMount: true,
+	}
+}
+
 func run(cfg config) error {
 	root, err := vfs.NewRoot(cfg.source, vfs.Options{
 		DefaultPlayMs: cfg.defaultLengthSec * 1000,
@@ -68,11 +78,7 @@ func run(cfg config) error {
 		return err
 	}
 
-	mountOpts := &fs.Options{
-		MountOptions: gofuse.MountOptions{
-			AllowOther: cfg.allowOther,
-		},
-	}
+	mountOpts := &fs.Options{MountOptions: fuseMountOptions(cfg)}
 
 	server, err := fs.Mount(cfg.mountpoint, root, mountOpts)
 	if err != nil {

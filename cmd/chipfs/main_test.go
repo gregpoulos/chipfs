@@ -35,6 +35,16 @@ func TestParseArgs_AllowOther(t *testing.T) {
 	assert.True(t, cfg.allowOther, "-allow_other flag must set allowOther=true")
 }
 
+// DirectMount lets a root process bypass fusermount3, which is unusable under
+// Ubuntu's fusermount3 AppArmor profile inside LXC. go-fuse falls back to
+// fusermount3 when the direct mount(2) fails, so non-root use is unaffected.
+func TestFuseMountOptions(t *testing.T) {
+	opts := fuseMountOptions(config{allowOther: true})
+	assert.True(t, opts.DirectMount, "DirectMount must be set so root can bypass fusermount3")
+	assert.True(t, opts.AllowOther, "allowOther must propagate")
+	assert.False(t, fuseMountOptions(config{}).AllowOther)
+}
+
 func TestParseArgs_MountOptions(t *testing.T) {
 	cfg, err := parseArgs([]string{
 		"-source", "/tmp/chips",

@@ -189,7 +189,7 @@ ExecStart=<CHIPFS_BINARY> \
     -source <SOURCE_DIR> \
     -mountpoint /mnt/chipfs \
     -allow_other
-ExecStop=fusermount3 -u /mnt/chipfs
+ExecStop=umount /mnt/chipfs
 Restart=on-failure
 
 [Install]
@@ -203,7 +203,12 @@ mount disappears.
 
 > **Note:** Systemd does not interpret shell escapes in `ExecStart` — use
 > double quotes for paths with spaces, not backslashes.
-> On older systems (pre-FUSE3) replace `fusermount3` with `fusermount`.
+
+> **Note:** When run as root, ChipFS mounts with `mount(2)` directly and only
+> falls back to `fusermount3` if that fails. This matters on Ubuntu 25.04+
+> inside LXC, where the `fusermount3` AppArmor profile breaks the helper
+> (symptoms: no output from `fusermount3 -V`, "not a socket" errors from
+> go-fuse). Use `umount` rather than `fusermount3 -u` there for the same reason.
 
 Then enable and start it:
 
