@@ -80,6 +80,10 @@ The output format is: RIFF header → `fmt ` chunk → `id3 ` chunk (ID3v2 tag) 
 chunk provides the same metadata to older WAV parsers (Windows Media Player,
 Winamp) that do not read `id3 `. Both coexist in every output file.
 
+The ID3 tag also carries `TPE2` (album artist) when `Metadata.AlbumArtist` is set;
+it has no `LIST INFO` equivalent. It goes through the same `buildID3v2` path as every
+other frame, so `EstimatedSize` stays exact.
+
 `EstimatedSize(durationMs, opts)` returns the exact byte count for a track of the
 given duration. This value is reported to FUSE in `getattr` before emulation begins.
 
@@ -116,6 +120,16 @@ FUSE node implementations using `hanwen/go-fuse/v2`'s `NodeFS` API.
 - **`SourceDir`:** Mirror of a real subdirectory. Populated by `Root` during
   the same scan; recognized chiptune files inside it get a passthrough file and
   a virtual `ChipDir` sibling exactly as at the top level.
+- **Tags:** All tag strings pass through `cleanTag` (whitespace trimmed; a bare `?`
+  or `<?>` treated as missing) so fixed-width padding and rippers' placeholders
+  can't split one album into several. For SPC files the album is always the
+  **parent folder's name**, not the embedded game tag: an SPC album is a folder of
+  single-track files, and the embedded tag varies within one game's folder. Each
+  SPC track's album artist (`TPE2`) is the folder's most common track artist
+  (ties break alphabetically), so per-track composers don't split the album in
+  taglib-based servers like Navidrome; the track artist stays per-file. NSF and
+  GBS tracks get no album artist. Virtual nodes report their source's mtime
+  (`setTimes`), since Navidrome rejects a zero timestamp when streaming.
 - **`RealFile`:** Passthrough read of the original chiptune file on disk.
   `Open` opens an `*os.File` and returns a `realFileHandle` that holds it for
   the lifetime of the open/release pair; go-fuse dispatches reads to the handle's

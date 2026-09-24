@@ -160,6 +160,8 @@ func (r *Root) populate(ctx context.Context, parent *fs.Inode, dir string) {
 		log.Printf("vfs: failed to read source directory %q: %v", dir, err)
 		return
 	}
+	var pending []pendingChip
+	var spcArtists []string
 	for _, e := range entries {
 		name := e.Name()
 		fullPath := filepath.Join(dir, name)
@@ -184,22 +186,50 @@ func (r *Root) populate(ctx context.Context, parent *fs.Inode, dir string) {
 		rfInode := parent.NewPersistentInode(ctx, rf, fs.StableAttr{Mode: syscall.S_IFREG})
 		parent.AddChild(name, rfInode, false)
 
-		// For recognized chiptune files, also add a virtual ChipDir.
+		// Recognized chiptune files also get a virtual ChipDir, added after
+		// the loop once the folder-wide album artist is known.
 		tracks := buildTrackList(fullPath, r.defaultPlayMs, r.defaultFadeMs)
 		if tracks == nil {
 			continue
 		}
-		stem := strings.TrimSuffix(name, filepath.Ext(name))
-		chipDir := &ChipDir{
-			sourcePath: fullPath,
-			mtime:      entryMtime(e),
-			tracks:     tracks,
-			cache:      r.cache,
-			sf:         r.sf,
+		isSPC := strings.EqualFold(filepath.Ext(name), ".spc")
+		if isSPC {
+			spcArtists = append(spcArtists, tracks[0].opts.Metadata.Artist)
 		}
-		dirInode := parent.NewPersistentInode(ctx, chipDir, fs.StableAttr{Mode: syscall.S_IFDIR})
-		parent.AddChild(stem, dirInode, false)
+		pending = append(pending, pendingChip{
+			stem:  strings.TrimSuffix(name, filepath.Ext(name)),
+			isSPC: isSPC,
+			chip: &ChipDir{
+				sourcePath: fullPath,
+				mtime:      entryMtime(e),
+				tracks:     tracks,
+				cache:      r.cache,
+				sf:         r.sf,
+			},
+		})
 	}
+
+	// SPC files are single-track, so an album is a folder of them. Give every
+	// track in the folder the same album artist (the most common track artist)
+	// so per-track composer differences don't split the album.
+	albumArtist := mostCommon(spcArtists)
+	for _, p := range pending {
+		if p.isSPC {
+			for i := range p.chip.tracks {
+				p.chip.tracks[i].opts.Metadata.AlbumArtist = albumArtist
+			}
+		}
+		dirInode := parent.NewPersistentInode(ctx, p.chip, fs.StableAttr{Mode: syscall.S_IFDIR})
+		parent.AddChild(p.stem, dirInode, false)
+	}
+}
+
+// pendingChip is a ChipDir awaiting insertion once its folder's album artist
+// has been computed.
+type pendingChip struct {
+	stem  string
+	isSPC bool
+	chip  *ChipDir
 }
 
 // ---------------------------------------------------------------------------
@@ -419,7 +449,7 @@ func buildTrackList(path string, defaultPlayMs, defaultFadeMs int) []trackEntry 
 				Metadata: wav.Metadata{
 					Title:  title,
 					Artist: cleanTag(h.Artist),
-					Album:  cleanTag(h.GameTitle),
+					Album:  spcAlbum(path),
 					Track:  1,
 				},
 			},
@@ -428,6 +458,40 @@ func buildTrackList(path string, defaultPlayMs, defaultFadeMs int) []trackEntry 
 	default:
 		return nil
 	}
+}
+
+// spcAlbum returns the album name for an SPC file: its parent folder's name.
+// An SPC "album" is really a folder of single-track files, and the embedded
+// game-title tag varies within one game's folder (padding, abbreviations,
+// missing entirely), so the folder name is the one consistent value.
+func spcAlbum(path string) string {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return ""
+	}
+	album := filepath.Base(filepath.Dir(abs))
+	if album == string(filepath.Separator) {
+		return ""
+	}
+	return cleanTag(album)
+}
+
+// mostCommon returns the most frequent non-empty value, breaking ties toward
+// the lexicographically smallest so results are deterministic. Returns "" when
+// there are no non-empty values.
+func mostCommon(values []string) string {
+	counts := make(map[string]int)
+	best := ""
+	for _, v := range values {
+		if v == "" {
+			continue
+		}
+		counts[v]++
+		if counts[v] > counts[best] || (counts[v] == counts[best] && v < best) {
+			best = v
+		}
+	}
+	return best
 }
 
 // cleanTag trims whitespace from a metadata tag (SPC tags are fixed-width and

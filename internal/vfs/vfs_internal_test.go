@@ -439,3 +439,56 @@ func TestCleanTag(t *testing.T) {
 	assert.Equal(t, "", cleanTag(""))
 	assert.Equal(t, "What?", cleanTag("What?"), "only a bare placeholder is missing")
 }
+
+func TestMostCommon(t *testing.T) {
+	assert.Equal(t, "b", mostCommon([]string{"a", "b", "b", "c"}))
+	assert.Equal(t, "a", mostCommon([]string{"b", "a"}), "ties break to the lexicographically smallest")
+	assert.Equal(t, "x", mostCommon([]string{"", "", "x"}), "empty values are ignored")
+	assert.Equal(t, "", mostCommon(nil))
+	assert.Equal(t, "", mostCommon([]string{"", ""}))
+}
+
+// TestSPC_AlbumIsFolderName_AlbumArtistIsMostCommon verifies that SPC files
+// group by their folder rather than by their inconsistent embedded tags: the
+// album is the folder name, and the album artist is the folder's most common
+// track artist, so per-track composers can't split the album.
+func TestSPC_AlbumIsFolderName_AlbumArtistIsMostCommon(t *testing.T) {
+	src := t.TempDir()
+	folder := filepath.Join(src, "Chrono Trigger")
+	for _, n := range []string{"a.spc", "b.spc", "c.spc"} {
+		copyFixture(t, "ode-to-joy.spc", filepath.Join(folder, n))
+	}
+	// ode-to-joy.spc's tags are irrelevant: rewrite artist per file so two
+	// share one composer and one differs.
+	setArtist := func(name, artist string) {
+		p := filepath.Join(folder, name)
+		data, err := os.ReadFile(p)
+		require.NoError(t, err)
+		for i := 0xB1; i < 0xD1; i++ {
+			data[i] = 0
+		}
+		copy(data[0xB1:0xD1], artist)
+		require.NoError(t, os.WriteFile(p, data, 0o644))
+	}
+	setArtist("a.spc", "Mitsuda")
+	setArtist("b.spc", "Mitsuda")
+	setArtist("c.spc", "Uematsu")
+
+	root, err := NewRoot(src, Options{})
+	require.NoError(t, err)
+	fs.NewNodeFS(root, &fs.Options{})
+
+	game := root.GetChild("Chrono Trigger")
+	require.NotNil(t, game)
+	for _, stem := range []string{"a", "b", "c"} {
+		dir := game.GetChild(stem)
+		require.NotNil(t, dir, stem)
+		cd := dir.Operations().(*ChipDir)
+		require.Len(t, cd.tracks, 1)
+		md := cd.tracks[0].opts.Metadata
+		assert.Equal(t, "Chrono Trigger", md.Album, stem+" album must be the folder name")
+		assert.Equal(t, "Mitsuda", md.AlbumArtist, stem+" album artist must be the folder's most common artist")
+	}
+	assert.Equal(t, "Uematsu", game.GetChild("c").Operations().(*ChipDir).tracks[0].opts.Metadata.Artist,
+		"track artist stays per-file")
+}
