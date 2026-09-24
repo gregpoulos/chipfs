@@ -341,7 +341,7 @@ func buildTrackList(path string, defaultPlayMs, defaultFadeMs int) []trackEntry 
 			var title string
 			var playMs, fadeMs int
 			if i < len(h.Tracks) {
-				title = h.Tracks[i].Title
+				title = cleanTag(h.Tracks[i].Title)
 				playMs = h.Tracks[i].DurationMs
 				fadeMs = h.Tracks[i].FadeMs
 			}
@@ -362,8 +362,8 @@ func buildTrackList(path string, defaultPlayMs, defaultFadeMs int) []trackEntry 
 					Channels:   2,
 					Metadata: wav.Metadata{
 						Title:  title,
-						Artist: h.Artist,
-						Album:  h.Title,
+						Artist: cleanTag(h.Artist),
+						Album:  cleanTag(h.Title),
 						Track:  i + 1,
 					},
 				},
@@ -389,8 +389,8 @@ func buildTrackList(path string, defaultPlayMs, defaultFadeMs int) []trackEntry 
 					Channels:   2,
 					Metadata: wav.Metadata{
 						Title:  fmt.Sprintf("Track %d", i+1),
-						Artist: h.Author,
-						Album:  h.Title,
+						Artist: cleanTag(h.Author),
+						Album:  cleanTag(h.Title),
 						Track:  i + 1,
 					},
 				},
@@ -404,7 +404,7 @@ func buildTrackList(path string, defaultPlayMs, defaultFadeMs int) []trackEntry 
 			log.Printf("vfs: skipping %q: %v", path, err)
 			return nil
 		}
-		title := h.SongTitle
+		title := cleanTag(h.SongTitle)
 		if title == "" {
 			title = "Track 1"
 		}
@@ -418,8 +418,8 @@ func buildTrackList(path string, defaultPlayMs, defaultFadeMs int) []trackEntry 
 				Channels:   2,
 				Metadata: wav.Metadata{
 					Title:  title,
-					Artist: h.Artist,
-					Album:  h.GameTitle,
+					Artist: cleanTag(h.Artist),
+					Album:  cleanTag(h.GameTitle),
 					Track:  1,
 				},
 			},
@@ -428,6 +428,17 @@ func buildTrackList(path string, defaultPlayMs, defaultFadeMs int) []trackEntry 
 	default:
 		return nil
 	}
+}
+
+// cleanTag trims whitespace from a metadata tag (SPC tags are fixed-width and
+// often space-padded) and maps rippers' bare "unknown" placeholders to empty.
+// Untrimmed or placeholder values would split one game into several albums.
+func cleanTag(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "?" || s == "<?>" {
+		return ""
+	}
+	return s
 }
 
 // sanitizeFilename replaces characters that are invalid or problematic in

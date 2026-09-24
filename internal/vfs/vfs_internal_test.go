@@ -426,3 +426,16 @@ func TestGetattr_ReportsSourceTimestamps(t *testing.T) {
 	assertTimes("track file", attr(track), fileTime)
 	assertTimes("source dir", attr(root.GetChild("SNES")), dirTime)
 }
+
+// TestCleanTag verifies fixed-width padding is trimmed and rippers'
+// "unknown" placeholders are treated as missing, so they can't split albums.
+func TestCleanTag(t *testing.T) {
+	assert.Equal(t, "SUPER MARIOWORLD", cleanTag("SUPER MARIOWORLD   "))
+	assert.Equal(t, "Donkey Kong Country", cleanTag("Donkey Kong Country "))
+	assert.Equal(t, "Koji Kondo", cleanTag("  Koji Kondo\t"))
+	assert.Equal(t, "", cleanTag("<?>"))
+	assert.Equal(t, "", cleanTag("?"))
+	assert.Equal(t, "", cleanTag("  <?> "))
+	assert.Equal(t, "", cleanTag(""))
+	assert.Equal(t, "What?", cleanTag("What?"), "only a bare placeholder is missing")
+}
