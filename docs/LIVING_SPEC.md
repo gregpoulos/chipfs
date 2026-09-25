@@ -249,7 +249,10 @@ filename approach.
 **SPC** — One track per file. Play duration is embedded in the ID666 tag (stored
 as integer seconds; ChipFS multiplies by 1000 for milliseconds). The virtual
 directory for `track.spc` contains exactly one file named from the `song_name`
-ID666 field.
+ID666 field. ID666 has text and binary layouts with no reliable marker; the
+guess can mistake a text tag with blank durations for binary, so the binary path
+discards implausible durations and reads the artist from the text offset when
+0xB0 is padding.
 
 ---
 

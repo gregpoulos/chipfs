@@ -161,3 +161,28 @@ func TestParse_OdeToJoy(t *testing.T) {
 	assert.Equal(t, 14_000, h.PlayDurationMs)
 	assert.Equal(t, 0, h.FadeDurationMs)
 }
+
+// A text-format tag with blank duration and date fields has no ASCII digit at
+// 0xA9, so it's detected as binary. The artist must still be read from 0xB1,
+// and blank-as-spaces durations must not decode as huge binary numbers.
+func TestParse_TextFormatBlankDurations(t *testing.T) {
+	for name, fill := range map[string]byte{"null-filled": 0x00, "space-filled": ' '} {
+		data := makeSPC("Song", "Game", "Yasunori Mitsuda", 0, 0)
+		for i := 0x9E; i < 0xB1; i++ {
+			data[i] = fill
+		}
+
+		h, err := spc.Parse(data)
+		require.NoError(t, err, name)
+		assert.Equal(t, "Yasunori Mitsuda", h.Artist, name)
+		assert.Equal(t, 0, h.PlayDurationMs, name)
+		assert.Equal(t, 0, h.FadeDurationMs, name)
+	}
+}
+
+// A binary-format artist that happens to start with a digit is kept intact.
+func TestParse_BinaryFormat_ArtistStartingWithDigit(t *testing.T) {
+	h, err := spc.Parse(makeSPCBinary("Song", "Game", "8-Bit Weapon", 61, 8000))
+	require.NoError(t, err)
+	assert.Equal(t, "8-Bit Weapon", h.Artist)
+}

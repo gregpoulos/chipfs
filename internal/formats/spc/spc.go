@@ -28,6 +28,13 @@ const spcMagic = "SNES-SPC700 Sound File Data v0."
 // version suffix.
 const minHeaderLen = 33
 
+// Binary durations above these are treated as unknown: the play limit matches
+// libgme's, and the fade limit is the longest the 5-digit text field can hold.
+const (
+	maxBinaryPlaySec = 0x1FFF
+	maxBinaryFadeMs  = 99_999
+)
+
 // Header contains the parsed ID666 tag metadata from an SPC file.
 type Header struct {
 	SongTitle      string
@@ -56,11 +63,22 @@ func Parse(data []byte) (*Header, error) {
 	}
 
 	if isBinaryFormat(data) {
-		// Binary format: durations are raw little-endian integers; artist is at 0xB0.
-		playSec := uint32(data[0xA9]) | uint32(data[0xAA])<<8 | uint32(data[0xAB])<<16
-		h.PlayDurationMs = int(playSec) * 1000
-		h.FadeDurationMs = int(binary.LittleEndian.Uint32(data[0xAC:0xB0]))
-		h.Artist = nullPaddedString(data[0xB0:0xD0])
+		// Binary format: durations are raw little-endian integers; artist is at
+		// 0xB0. A text tag with blank durations also lands here, so reject
+		// durations no real track has, and read the artist from its text offset
+		// when 0xB0 holds padding rather than a character.
+		playSec := int(data[0xA9]) | int(data[0xAA])<<8 | int(data[0xAB])<<16
+		if playSec <= maxBinaryPlaySec {
+			h.PlayDurationMs = playSec * 1000
+		}
+		if fadeMs := binary.LittleEndian.Uint32(data[0xAC:0xB0]); fadeMs <= maxBinaryFadeMs {
+			h.FadeDurationMs = int(fadeMs)
+		}
+		if data[0xB0] <= ' ' {
+			h.Artist = nullPaddedString(data[0xB1:0xD1])
+		} else {
+			h.Artist = nullPaddedString(data[0xB0:0xD0])
+		}
 	} else {
 		// Text format: durations are ASCII decimal strings; artist is at 0xB1.
 		h.PlayDurationMs = parseASCIIInt(data[0xA9:0xAC]) * 1000
