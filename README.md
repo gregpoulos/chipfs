@@ -80,6 +80,12 @@ volumes:
 once at mount time. Files added to the source directory after mounting are not
 visible until chipfs is restarted.
 
+**Played tracks live in RAM.** A track is rendered in full on first play and
+kept in the cache: about 10.6 MB per minute of audio (≈33 MB at the default
+length). `-cache_size_mb` bounds what is kept afterwards; while rendering, a
+track briefly needs about twice its size, and different tracks can render at
+once. Budget accordingly on small machines such as a Raspberry Pi.
+
 **Name clashes get a suffix.** If `game.gbs` and `game.nsf` (or a real `game/`
 folder) sit side by side, the second chiptune's track folder is `game (nsf)`.
 
