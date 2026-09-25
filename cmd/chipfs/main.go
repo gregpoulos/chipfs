@@ -90,9 +90,12 @@ func run(cfg config) error {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
-		<-sig
-		fmt.Println("\nchipfs: unmounting…")
-		server.Unmount()
+		for range sig {
+			fmt.Println("\nchipfs: unmounting…")
+			if err := server.Unmount(); err != nil {
+				fmt.Fprintf(os.Stderr, "chipfs: unmount failed: %v (close files on the mount, then retry)\n", err)
+			}
+		}
 	}()
 
 	server.Wait()
