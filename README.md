@@ -80,6 +80,9 @@ volumes:
 once at mount time. Files added to the source directory after mounting are not
 visible until chipfs is restarted.
 
+**Name clashes get a suffix.** If `game.gbs` and `game.nsf` (or a real `game/`
+folder) sit side by side, the second chiptune's track folder is `game (nsf)`.
+
 **Only regular files are exposed.** Symlinks, device nodes, and other special
 files in the source directory are silently skipped.
 

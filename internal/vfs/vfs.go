@@ -197,7 +197,7 @@ func (r *Root) populate(ctx context.Context, parent *fs.Inode, dir string) {
 			spcArtists = append(spcArtists, tracks[0].opts.Metadata.Artist)
 		}
 		pending = append(pending, pendingChip{
-			stem:  strings.TrimSuffix(name, filepath.Ext(name)),
+			name:  name,
 			isSPC: isSPC,
 			chip: &ChipDir{
 				sourcePath: fullPath,
@@ -220,16 +220,33 @@ func (r *Root) populate(ctx context.Context, parent *fs.Inode, dir string) {
 			}
 		}
 		dirInode := parent.NewPersistentInode(ctx, p.chip, fs.StableAttr{Mode: syscall.S_IFDIR})
-		parent.AddChild(p.stem, dirInode, false)
+		addChipDir(parent, p.name, dirInode)
 	}
 }
 
 // pendingChip is a ChipDir awaiting insertion once its folder's album artist
 // has been computed.
 type pendingChip struct {
-	stem  string
+	name  string // source file name, e.g. "game.nsf"
 	isSPC bool
 	chip  *ChipDir
+}
+
+// addChipDir adds a chiptune's virtual folder under its file stem ("game"), or
+// "game (nsf)" when the stem is taken. Real entries are added first, so they
+// always keep their names; chiptunes sharing a stem are resolved in sorted order.
+func addChipDir(parent *fs.Inode, fileName string, dir *fs.Inode) {
+	ext := filepath.Ext(fileName)
+	stem := strings.TrimSuffix(fileName, ext)
+	fallback := strings.TrimSpace(fmt.Sprintf("%s (%s)", stem, ext[1:]))
+	if stem != "" && parent.AddChild(stem, dir, false) {
+		return
+	}
+	if parent.AddChild(fallback, dir, false) {
+		log.Printf("vfs: %q: folder name %q taken, using %q", fileName, stem, fallback)
+		return
+	}
+	log.Printf("vfs: skipping %q: folder names %q and %q are both taken", fileName, stem, fallback)
 }
 
 // ---------------------------------------------------------------------------

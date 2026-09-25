@@ -479,3 +479,34 @@ func TestSPC_AlbumIsFolderName_AlbumArtistIsMostCommon(t *testing.T) {
 	assert.Equal(t, "Uematsu", game.GetChild("c").Operations().(*ChipDir).tracks[0].opts.Metadata.Artist,
 		"track artist stays per-file")
 }
+
+// TestRoot_StemCollision verifies a chiptune whose virtual folder name is
+// already taken (by a real entry or another chiptune with the same stem) gets
+// "stem (ext)" instead of silently vanishing, and that an empty stem (a file
+// named just ".nsf") doesn't crash the mount.
+func TestRoot_StemCollision(t *testing.T) {
+	src := t.TempDir()
+	copyFixture(t, "seaside-village.gbs", filepath.Join(src, "game.gbs"))
+	copyFixture(t, "pently.nsf", filepath.Join(src, "game.nsf"))
+	copyFixture(t, "ode-to-joy.spc", filepath.Join(src, "song.spc"))
+	require.NoError(t, os.Mkdir(filepath.Join(src, "song"), 0o755))
+	copyFixture(t, "pently.nsf", filepath.Join(src, ".nsf"))
+
+	root, err := NewRoot(src, Options{})
+	require.NoError(t, err)
+	fs.NewNodeFS(root, &fs.Options{})
+
+	chipDir := func(name string) *ChipDir {
+		t.Helper()
+		in := root.GetChild(name)
+		require.NotNil(t, in, name)
+		cd, ok := in.Operations().(*ChipDir)
+		require.True(t, ok, "%s must be a ChipDir", name)
+		return cd
+	}
+	assert.Len(t, chipDir("game").tracks, 1, "first in sorted order (game.gbs) keeps the stem")
+	assert.Len(t, chipDir("game (nsf)").tracks, 24)
+	assert.IsType(t, &SourceDir{}, root.GetChild("song").Operations(), "real directory keeps its name")
+	assert.Len(t, chipDir("song (spc)").tracks, 1)
+	assert.Len(t, chipDir("(nsf)").tracks, 24)
+}

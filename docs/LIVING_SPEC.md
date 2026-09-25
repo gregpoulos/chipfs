@@ -117,6 +117,9 @@ FUSE node implementations using `hanwen/go-fuse/v2`'s `NodeFS` API.
   devices, and other special files are silently skipped to prevent a symlink
   from escaping the source directory boundary or forming a cycle. go-fuse
   handles `Readdir`/`Lookup` automatically from the pre-populated tree.
+  A chiptune's virtual folder is named after its file stem; if a real entry or
+  an earlier (sorted) chiptune already holds that name, it becomes `stem (ext)`
+  (e.g. `game (nsf)`) with a logged warning, rather than being dropped.
 - **`SourceDir`:** Mirror of a real subdirectory. Populated by `Root` during
   the same scan; recognized chiptune files inside it get a passthrough file and
   a virtual `ChipDir` sibling exactly as at the top level.
