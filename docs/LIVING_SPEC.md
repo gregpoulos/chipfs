@@ -1,9 +1,8 @@
 # ChipFS — Living Specification
 
 *This document describes the current architecture of ChipFS. It is updated as
-the implementation evolves. For background on design decisions, see
-[DESIGN.md](DESIGN.md). For accessible conceptual explanations, see
-[CONCEPTS.md](CONCEPTS.md). For current task status, see [TODO.md](TODO.md).*
+the implementation evolves. For accessible conceptual explanations, see
+[CONCEPTS.md](CONCEPTS.md). For open work, see [TODO.md](TODO.md).*
 
 ---
 
@@ -31,10 +30,10 @@ any audio is generated. ChipFS solves this by using WAV output, whose size is
 mathematically exact: `(duration_ms / 1000) × sample_rate × channels × 2 + header`.
 `wav.EstimatedSize()` must return the exact value that `wav.Encode()` produces.
 
-**2. Tracks that never end:** NES and Game Boy music loops forever. ChipFS calls
-`gme_set_fade(emu, start_ms)` to instruct libgme to fade out at a specified point.
-The fade start is taken from NSFe `time` metadata when available; otherwise a
-configurable default (180 seconds) is used.
+**2. Tracks that never end:** NES and Game Boy music loops forever. ChipFS tells
+libgme to fade out at a specified point. The fade start and length come from the
+file (NSFe `time`/`fade`, SPC ID666) when available; otherwise configurable
+defaults (180 s play, 8 s fade) are used.
 
 **3. Seeking requires re-emulation:** Emulator state is not reversible. ChipFS
 mitigates this by caching the entire rendered track in RAM after the first read.
@@ -43,19 +42,33 @@ additional emulation cost.
 
 ---
 
+## Design Rationale
+
+- **WAV output**, not MP3 or FLAC: exact sizes (see above), no encoder
+  dependency, universally playable. FLAC would shrink cached tracks but makes
+  sizes estimates, not facts.
+- **libgme** is the reference-quality emulator for these formats, with a small C
+  API and native fade support; no maintained pure-Go port exists. Its LGPL 2.1
+  license is compatible with MIT ChipFS under dynamic linking, which is how CGO
+  links it.
+- **Go with `hanwen/go-fuse/v2`** over Rust with `fuser`: faster iteration for a
+  solo project and a more mature FUSE library (used by rclone).
+- **Prior art:** mp3fs/ffmpegfs (transcoding FUSE filesystems; same buffered
+  seeking model) and bazil/zipfs (one source file presented as many virtual files).
+
+---
+
 ## Architecture
 
-ChipFS is organized into six internal packages with strict dependency ordering.
-No package imports a package above it in this list.
+Packages are listed in dependency order: each imports only packages listed above it.
 
 ### `internal/formats/{nsf,gbs,spc}`
 
 Pure Go binary parsers. Each reads a file's header bytes using `encoding/binary`
 and returns a `Header` struct. No I/O, no emulation, no CGO.
 
-**Current status:** These parsers are the sole metadata source for the
-mount-time directory scan. `buildTrackList` calls them directly — no CGO at
-scan time. libgme is reserved for rendering only (`renderTrack`). NSFe `plst`
+These parsers are the sole metadata source for the mount-time directory scan;
+libgme is used only for rendering, so scanning needs no CGO. NSFe `plst`
 playlist remapping is handled by the Go parser: after parsing, `h.Tracks` is
 already in playlist order and `h.TrackCount` equals the playlist length, so
 `renderTrack`'s `emu.StartTrack(trackIdx)` (where `trackIdx` is the 0-indexed
@@ -237,17 +250,3 @@ ID666 field. ID666 has text and binary layouts with no reliable marker; the
 guess can mistake a text tag with blank durations for binary, so the binary path
 discards implausible durations and reads the artist from the text offset when
 0xB0 is padding.
-
----
-
-## Current Implementation Status
-
-Phases 1–9 are complete. The filesystem mounts, serves virtual WAV files with
-correct metadata and exact file sizes, and passes the Docker smoke test. All
-hardening items (singleflight coalescing, LIST INFO RIFF chunk, RealFile
-FileHandle, format parser split), test coverage (corrupt-fixture EIO test,
-`-allow_other` smoke coverage, GitHub Actions CI), and mount options
-(`-default_length`, `-fade_length`, `-cache_size_mb`) are done.
-
-Deferred items (RSN support, FLAC output, N64/PSX formats, write support) remain
-out of scope for v1. See [TODO.md](TODO.md).

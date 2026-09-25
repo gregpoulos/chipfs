@@ -597,6 +597,8 @@ var _ fs.NodeReader = (*TrackFile)(nil)
 // Open tells the FUSE kernel to use direct I/O for this virtual file, bypassing
 // the kernel page cache. All reads come directly to our Read handler, which
 // implements its own lazy-render + LRU cache logic.
+// Without an Open method, go-fuse may fail every read with EOPNOTSUPP even
+// though Read is implemented.
 func (f *TrackFile) Open(_ context.Context, _ uint32) (fs.FileHandle, uint32, syscall.Errno) {
 	return nil, gofuse.FOPEN_DIRECT_IO, 0
 }

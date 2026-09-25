@@ -10,7 +10,7 @@ like Navidrome to scan and stream classic video game music.
 
 | Dependency | macOS | Debian/Ubuntu |
 |---|---|---|
-| Go ≥ 1.22 | `brew install go` | `apt install golang` |
+| Go ≥ 1.26 | `brew install go` | `apt install golang` |
 | libgme | `brew install game-music-emu` | `apt install libgme-dev` |
 | FUSE (optional, local mount) | `brew install --cask macfuse` | `apt install fuse3` |
 
@@ -98,8 +98,8 @@ Format parser tests only (no CGO required):
 go test ./internal/formats/...
 ```
 
-FUSE integration tests are marked `t.Skip` and run only in Docker or on a
-machine with macFUSE installed. Use the smoke test target instead (see below).
+FUSE-level behavior is covered by the Docker smoke test (see below), which
+needs a FUSE-capable Docker host and is not run by GitHub CI.
 
 ## Manual Integration Testing
 
@@ -264,4 +264,3 @@ the fixture files appear with correct metadata (Artist, Album, track titles).
   mount time. Restart chipfs to pick up new files.
 - N64, PS1, PS2, and later console formats are not supported — their emulation
   is too computationally expensive for real-time rendering.
-- FUSE integration tests require Linux or macOS with macFUSE; unit tests run anywhere.

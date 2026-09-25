@@ -22,24 +22,19 @@ Each format parser needs both synthetic-fixture tests and a real-file fixture te
 | `internal/formats/spc` | Parse SPC ID666 tags |
 | `internal/wav` | Build WAV byte slices from PCM samples; inject ID3 tags; calculate exact file sizes |
 | `internal/cache` | LRU in-memory store for fully-rendered WAV tracks (keyed by path + track index) |
-| `internal/gme` | CGO wrapper around libgme: open files, enumerate tracks, render PCM samples |
+| `internal/gme` | CGO wrapper around libgme: open files, render PCM samples |
 | `internal/vfs` | FUSE nodes (Root, ChipDir, TrackFile) using hanwen/go-fuse |
 | `cmd/chipfs` | Entry point: flag parsing, FUSE mount |
 | `cmd/render` | Dev tool: renders a single track to a WAV file without a FUSE mount |
 
 ## Key Constraints
 
-**CGO is required** for `internal/gme`. The `libgme` headers must be on the
-include path. On macOS with Homebrew this is automatic; on Linux set:
-```bash
-export CGO_CFLAGS="-I/usr/include"
-export CGO_LDFLAGS="-lgme"
-```
+**CGO is required** for `internal/gme` (libgme headers and library installed;
+see README).
 
-**FUSE integration tests require Linux or macFUSE.** The tests in
-`internal/vfs` that are marked `t.Skip("integration test: requires FUSE mount")`
-run only in Docker or on a machine with macFUSE installed. All other tests run
-anywhere.
+**FUSE behavior is tested only by the Docker smoke test**
+(`docker build --target smoke-test`), which needs a FUSE-capable Docker host and
+is not run by GitHub CI. Unit tests run anywhere.
 
 **The WAV muxer's `EstimatedSize` must exactly match `Encode` output** for the
 same duration and options. This invariant is critical: FUSE `getattr` reports
@@ -48,30 +43,11 @@ to truncate or reject the stream. All three of `Encode`, `HeaderBytes`, and
 `EstimatedSize` derive from one header builder and `SampleCount`; keep it that
 way. `TestEstimatedSize_MatchesEncode` guards it.
 
-## Known Pitfalls
-
-**CGO preamble comments must use `//`, never `/* */`.** The CGO preamble is
-delimited by a Go `/* */` block comment. Any C-style `/* ... */` inside it
-contains `*/` which prematurely closes the block comment, causing opaque Go
-parse errors (`non-declaration statement outside function body`, etc.).
-Always use `//` line comments inside CGO preambles.
-
-**Check the target platform's library version before writing CGO wrappers.**
-macOS Homebrew and Debian bookworm often ship different library versions with
-incompatible APIs. For libgme: Homebrew provides 0.6.4 (has `gme_set_fade_msecs`);
-Debian bookworm ships 0.6.3 (doesn't). The
-pattern for bridging version differences is a version-gated C shim in the CGO
-preamble (`#if defined(LIB_VERSION) && LIB_VERSION >= 0xXXXXXX`). Confirm the
-Debian package version with `apt-cache show <pkg>` before writing any CGO calls,
-and run `docker build --target builder .` after writing the wrapper to catch
-version errors before the rest of the implementation.
-
-**go-fuse NodeReader requires NodeOpener to be implemented.** Without an
-explicit `Open()` method, the FUSE kernel module may return EOPNOTSUPP
-("Operation not supported") for all reads on a file node, even if `NodeReader`
-is correctly implemented. Always implement `NodeOpener` alongside `NodeReader`.
-For virtual files that manage their own cache, use `FOPEN_DIRECT_IO` to bypass
-the kernel page cache; for passthrough files, use `FOPEN_KEEP_CACHE`.
+**libgme versions differ across build targets:** Homebrew ships 0.6.4; Debian
+bookworm (`builder`/`runtime` images) and Alpine (`navidrome-test` image) ship
+0.6.3. Bridge API differences with a version-gated shim in the `gme.go` CGO
+preamble, and after changing CGO calls run
+`docker build --target builder .` and `docker build --target navidrome-test .`.
 
 ## Available Skills
 
