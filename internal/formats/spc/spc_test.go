@@ -186,3 +186,14 @@ func TestParse_BinaryFormat_ArtistStartingWithDigit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "8-Bit Weapon", h.Artist)
 }
+
+// Byte 0x23 = 27 declares that the file has no ID666 tag; whatever sits in the
+// tag area is not metadata.
+func TestParse_NoID666Tag(t *testing.T) {
+	data := makeSPC("Garbage", "Garbage", "Garbage", 120, 8000)
+	data[0x23] = 27
+
+	h, err := spc.Parse(data)
+	require.NoError(t, err)
+	assert.Equal(t, spc.Header{}, *h)
+}

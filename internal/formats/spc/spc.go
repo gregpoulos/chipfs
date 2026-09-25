@@ -28,6 +28,9 @@ const spcMagic = "SNES-SPC700 Sound File Data v0."
 // version suffix.
 const minHeaderLen = 33
 
+// noID666Tag at offset 0x23 declares that the file carries no ID666 tag.
+const noID666Tag = 27
+
 // Binary durations above these are treated as unknown: the play limit matches
 // libgme's, and the fade limit is the longest the 5-digit text field can hold.
 const (
@@ -53,6 +56,9 @@ func Parse(data []byte) (*Header, error) {
 	}
 	if len(data) < 0xD2 {
 		return nil, fmt.Errorf("spc: file truncated: need %d bytes for ID666 tags, got %d", 0xD2, len(data))
+	}
+	if data[0x23] == noID666Tag {
+		return &Header{}, nil
 	}
 
 	h := &Header{
