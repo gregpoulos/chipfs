@@ -58,8 +58,8 @@ Always use `//` line comments inside CGO preambles.
 
 **Check the target platform's library version before writing CGO wrappers.**
 macOS Homebrew and Debian bookworm often ship different library versions with
-incompatible APIs. For libgme: Homebrew provides 0.6.4 (has `gme_set_fade_msecs`
-and `gme_info_t.fade_length`); Debian bookworm ships 0.6.3 (neither). The
+incompatible APIs. For libgme: Homebrew provides 0.6.4 (has `gme_set_fade_msecs`);
+Debian bookworm ships 0.6.3 (doesn't). The
 pattern for bridging version differences is a version-gated C shim in the CGO
 preamble (`#if defined(LIB_VERSION) && LIB_VERSION >= 0xXXXXXX`). Confirm the
 Debian package version with `apt-cache show <pkg>` before writing any CGO calls,

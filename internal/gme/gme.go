@@ -7,9 +7,8 @@
 // # CGO Requirements
 //
 // This package requires libgme to be installed:
-//   - macOS (Apple Silicon): brew install game-music-emu
-//   - macOS (Intel):         brew install game-music-emu
-//   - Ubuntu/Debian:         apt install libgme-dev
+//   - macOS:         brew install game-music-emu
+//   - Ubuntu/Debian: apt install libgme-dev
 //
 // # Thread Safety
 //
@@ -25,27 +24,19 @@ package gme
 #include <gme/gme.h>
 #include <stdlib.h>
 
-// libgme 0.6.4 added gme_set_fade_msecs and the fade_length field in
-// gme_info_t. Debian bookworm ships 0.6.3 which has neither.
-// Both shims below degrade gracefully on older versions.
-
-// chipfs_set_fade: calls gme_set_fade_msecs when available; falls back to
-// gme_set_fade (fade_ms ignored, libgme uses its internal 8-second default).
+// libgme 0.6.4 added gme_set_fade_msecs; Debian bookworm ships 0.6.3. On
+// older versions chipfs_set_fade falls back to gme_set_fade, ignoring fade_ms
+// (libgme then uses its internal 8-second fade).
+// Use only // comments in this preamble: a C block comment's closing token
+// would end the Go comment that wraps it.
 #if defined(GME_VERSION) && GME_VERSION >= 0x000604
 static void chipfs_set_fade(Music_Emu* emu, int start_ms, int fade_ms) {
     gme_set_fade_msecs(emu, start_ms, fade_ms);
-}
-static int chipfs_fade_length(gme_info_t* info) {
-    return info->fade_length;
 }
 #else
 static void chipfs_set_fade(Music_Emu* emu, int start_ms, int fade_ms) {
     (void)fade_ms;
     gme_set_fade(emu, start_ms);
-}
-static int chipfs_fade_length(gme_info_t* info) {
-    (void)info;
-    return -1; // not available; caller treats -1 as "use default"
 }
 #endif
 */
@@ -59,20 +50,6 @@ import (
 
 // ErrInvalidSampleRate is returned by Open when sampleRate is zero or negative.
 var ErrInvalidSampleRate = errors.New("gme: sample rate must be positive")
-
-// TrackInfo holds per-track metadata returned by libgme's gme_track_info().
-type TrackInfo struct {
-	Title     string
-	Game      string
-	Author    string
-	Copyright string
-	System    string
-	Comment   string
-	PlayMs    int // play_length from libgme: intro+loop×2, or 150000 if unknown
-	FadeMs    int // fade_length from file metadata; -1 if not specified
-	IntroMs   int // length of intro before first loop (-1 if unknown)
-	LoopMs    int // length of one loop (-1 if unknown)
-}
 
 // Emu wraps a libgme Music_Emu handle and exposes a safe Go API.
 // Call Close when done to release the underlying C resource.
@@ -101,28 +78,6 @@ func Open(data []byte, sampleRate int) (*Emu, error) {
 // TrackCount returns the number of tracks in the loaded file.
 func (e *Emu) TrackCount() int {
 	return int(C.gme_track_count(e.handle))
-}
-
-// TrackInfo returns metadata for the given 0-indexed track.
-func (e *Emu) TrackInfo(index int) (TrackInfo, error) {
-	var info *C.gme_info_t
-	if cerr := C.gme_track_info(e.handle, &info, C.int(index)); cerr != nil {
-		return TrackInfo{}, fmt.Errorf("gme: %s", C.GoString(cerr))
-	}
-	defer C.gme_free_info(info)
-
-	return TrackInfo{
-		Title:     C.GoString(info.song),
-		Game:      C.GoString(info.game),
-		Author:    C.GoString(info.author),
-		Copyright: C.GoString(info.copyright),
-		System:    C.GoString(info.system),
-		Comment:   C.GoString(info.comment),
-		PlayMs:    int(info.play_length),
-		FadeMs:    int(C.chipfs_fade_length(info)),
-		IntroMs:   int(info.intro_length),
-		LoopMs:    int(info.loop_length),
-	}, nil
 }
 
 // StartTrack prepares the emulator to render the given 0-indexed track.

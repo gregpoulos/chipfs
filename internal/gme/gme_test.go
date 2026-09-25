@@ -40,24 +40,6 @@ func TestOpen_Pently(t *testing.T) {
 	assert.Equal(t, 24, emu.TrackCount())
 }
 
-func TestTrackInfo_Pently(t *testing.T) {
-	emu, err := gme.Open(pentlyFixture(t), 44100)
-	require.NoError(t, err)
-	defer emu.Close()
-
-	info, err := emu.TrackInfo(0)
-	require.NoError(t, err)
-
-	// NSF stores global metadata; libgme exposes it on every track.
-	assert.Equal(t, "Pently demo", info.Game)
-	assert.Equal(t, "DJ Tepples", info.Author)
-	assert.Equal(t, "2019 Damian Yerrick", info.Copyright)
-	// play_length for plain NSF (no per-track duration) defaults to 150000ms (2.5 min).
-	assert.Greater(t, info.PlayMs, 0)
-	// fade_length is -1 when not specified by the file.
-	assert.Equal(t, -1, info.FadeMs)
-}
-
 func TestPlay_ProducesNonZeroSamples(t *testing.T) {
 	emu, err := gme.Open(pentlyFixture(t), 44100)
 	require.NoError(t, err)

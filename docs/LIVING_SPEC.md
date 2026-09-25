@@ -98,14 +98,12 @@ get/set/evict. Capacity is measured in bytes; eviction is LRU.
 ### `internal/gme`
 
 CGO wrapper around `libgme` (Game Music Emu). Exposes `Open`, `TrackCount`,
-`TrackInfo`, `StartTrack`, `SetFade`, `Play`, `TrackEnded`, `Close`. An `Emu`
+`StartTrack`, `SetFade`, `Play`, `TrackEnded`, `Close`. An `Emu`
 wraps a `*C.Music_Emu` handle and is not safe for concurrent use.
 
-The CGO preamble includes two version-gated C shims (`chipfs_set_fade`,
-`chipfs_fade_length`) that bridge the API difference between libgme 0.6.3
-(Debian bookworm) and 0.6.4 (Homebrew). See the `#if GME_VERSION >= 0x000604`
-block in `gme.go`. Always use `//` comments inside CGO preambles — `/* */`
-comments prematurely close the enclosing Go block comment.
+A version-gated C shim in the CGO preamble (`chipfs_set_fade`) bridges the
+API difference between libgme 0.6.3 (Debian bookworm) and 0.6.4 (Homebrew).
+Metadata comes from the pure-Go parsers, not libgme.
 
 ### `internal/vfs`
 

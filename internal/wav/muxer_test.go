@@ -110,7 +110,7 @@ func TestEncode_ID3TagContainsExpectedFrames(t *testing.T) {
 	opts := wav.Options{
 		SampleRate: 44100,
 		Channels:   2,
-		Metadata:   wav.Metadata{Title: "Flash Man", Artist: "Tateishi", Album: "Mega Man 2", Track: 5, Year: "1988"},
+		Metadata:   wav.Metadata{Title: "Flash Man", Artist: "Tateishi", Album: "Mega Man 2", Track: 5},
 	}
 	out := wav.Encode(samples, opts)
 
@@ -131,8 +131,6 @@ func TestEncode_ID3TagContainsExpectedFrames(t *testing.T) {
 	assert.Contains(t, string(id3Bytes), "Mega Man 2")
 	assert.Contains(t, string(id3Bytes), "TRCK")
 	assert.Contains(t, string(id3Bytes), "5")
-	assert.Contains(t, string(id3Bytes), "TYER")
-	assert.Contains(t, string(id3Bytes), "1988")
 }
 
 // TestEstimatedSize_MatchesEncode enforces the invariant FUSE getattr relies

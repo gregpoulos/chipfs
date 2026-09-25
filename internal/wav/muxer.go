@@ -22,8 +22,6 @@ type Metadata struct {
 	// artists differ. Omitted from the tag when empty.
 	AlbumArtist string
 	Track       int
-	Year        string
-	Comment     string
 }
 
 // Options configures WAV encoding parameters.
@@ -159,12 +157,6 @@ func buildID3v2(meta Metadata) []byte {
 	if meta.Track > 0 {
 		frames = append(frames, textFrame("TRCK", strconv.Itoa(meta.Track))...)
 	}
-	if meta.Year != "" {
-		frames = append(frames, textFrame("TYER", meta.Year)...)
-	}
-	if meta.Comment != "" {
-		frames = append(frames, commentFrame(meta.Comment)...)
-	}
 
 	// ID3v2.3 header: "ID3" + version (0x03 0x00) + flags + syncsafe size
 	tag := make([]byte, 10, 10+len(frames))
@@ -176,7 +168,7 @@ func buildID3v2(meta Metadata) []byte {
 	return append(tag, frames...)
 }
 
-// textFrame builds an ID3v2.3 text frame (TIT2, TPE1, TALB, TRCK, TYER, etc.).
+// textFrame builds an ID3v2.3 text frame (TIT2, TPE1, TALB, TPE2, TRCK).
 // Returns nil if text is empty.
 func textFrame(id, text string) []byte {
 	if text == "" {
@@ -193,29 +185,6 @@ func textFrame(id, text string) []byte {
 	// frame[8], frame[9] = 0x00, 0x00 (flags, already zero)
 	frame[10] = 0x03 // UTF-8 encoding
 	copy(frame[11:], text)
-	return frame
-}
-
-// commentFrame builds an ID3v2.3 COMM frame.
-func commentFrame(comment string) []byte {
-	if comment == "" {
-		return nil
-	}
-	// data = encoding (1) + language (3) + short desc null (1) + text
-	data := make([]byte, 5+len(comment))
-	data[0] = 0x03         // UTF-8
-	copy(data[1:4], "eng") // language
-	data[4] = 0x00         // empty short description, null-terminated
-	copy(data[5:], comment)
-
-	frame := make([]byte, 10+len(data)) // header (10) + data
-	copy(frame[0:4], "COMM")
-	frame[4] = byte(len(data) >> 24)
-	frame[5] = byte(len(data) >> 16)
-	frame[6] = byte(len(data) >> 8)
-	frame[7] = byte(len(data))
-	// frame[8], frame[9] = 0x00, 0x00 (flags, already zero)
-	copy(frame[10:], data)
 	return frame
 }
 
