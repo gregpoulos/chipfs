@@ -510,3 +510,27 @@ func TestRoot_StemCollision(t *testing.T) {
 	assert.Len(t, chipDir("song (spc)").tracks, 1)
 	assert.Len(t, chipDir("(nsf)").tracks, 24)
 }
+
+// TestBuildTrackList_DoesNotReadUnrecognizedFiles verifies non-chiptune files
+// are rejected by extension before being read, so a mount-time scan never
+// loads videos or archives into memory. A FIFO makes any read observable:
+// opening it blocks until a writer appears.
+func TestBuildTrackList_DoesNotReadUnrecognizedFiles(t *testing.T) {
+	fifo := filepath.Join(t.TempDir(), "song.mp3")
+	require.NoError(t, syscall.Mkfifo(fifo, 0o600))
+	t.Cleanup(func() {
+		// Unblock a reader stuck in open, if the test failed.
+		if w, err := os.OpenFile(fifo, os.O_WRONLY|syscall.O_NONBLOCK, 0); err == nil {
+			w.Close()
+		}
+	})
+
+	done := make(chan []trackEntry)
+	go func() { done <- buildTrackList(fifo, 180_000, 8_000) }()
+	select {
+	case tracks := <-done:
+		assert.Nil(t, tracks)
+	case <-time.After(time.Second):
+		t.Fatal("buildTrackList read a file it doesn't recognize")
+	}
+}

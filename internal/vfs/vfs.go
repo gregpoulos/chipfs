@@ -363,6 +363,9 @@ type trackEntry struct {
 // totalMs returns the full rendered duration including the fade.
 func (t trackEntry) totalMs() int { return t.playMs + t.fadeMs }
 
+// chiptuneExts lists the extensions buildTrackList handles; keep in sync with its switch.
+var chiptuneExts = map[string]bool{".nsf": true, ".nsfe": true, ".gbs": true, ".spc": true}
+
 // buildTrackList parses a chiptune file using the pure-Go format parsers and
 // returns its track list. Returns nil if the file is not a recognised format
 // or cannot be parsed. libgme is not called here; it is reserved for rendering
@@ -371,12 +374,16 @@ func (t trackEntry) totalMs() int { return t.playMs + t.fadeMs }
 // defaultPlayMs and defaultFadeMs are used as the clampMs fallback for tracks
 // that have no embedded duration or fade metadata.
 func buildTrackList(path string, defaultPlayMs, defaultFadeMs int) []trackEntry {
+	ext := strings.ToLower(filepath.Ext(path))
+	if !chiptuneExts[ext] {
+		return nil // don't read every video or archive in the tree
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil
 	}
 
-	switch strings.ToLower(filepath.Ext(path)) {
+	switch ext {
 	case ".nsf", ".nsfe":
 		h, err := nsfFmt.Parse(data)
 		if err != nil {
