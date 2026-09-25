@@ -555,19 +555,7 @@ func (d *ChipDir) Getattr(_ context.Context, _ fs.FileHandle, out *gofuse.AttrOu
 
 func (d *ChipDir) OnAdd(ctx context.Context) {
 	for _, t := range d.tracks {
-		totalMs := t.totalMs()
-		tf := &TrackFile{
-			sourcePath:    d.sourcePath,
-			mtime:         d.mtime,
-			trackIdx:      t.trackIdx,
-			playMs:        t.playMs,
-			fadeMs:        t.fadeMs,
-			opts:          t.opts,
-			header:        wav.HeaderBytes(totalMs, t.opts),
-			estimatedSize: wav.EstimatedSize(totalMs, t.opts),
-			cache:         d.cache,
-			sf:            d.sf,
-		}
+		tf := newTrackFile(d.sourcePath, d.mtime, t, d.cache, d.sf)
 		ch := d.NewPersistentInode(ctx, tf, fs.StableAttr{Mode: syscall.S_IFREG})
 		d.AddChild(t.filename, ch, false)
 	}
@@ -595,6 +583,21 @@ type TrackFile struct {
 	estimatedSize int64
 	cache         *cache.Cache
 	sf            *singleflight.Group
+}
+
+func newTrackFile(sourcePath string, mtime time.Time, t trackEntry, c *cache.Cache, sf *singleflight.Group) *TrackFile {
+	return &TrackFile{
+		sourcePath:    sourcePath,
+		mtime:         mtime,
+		trackIdx:      t.trackIdx,
+		playMs:        t.playMs,
+		fadeMs:        t.fadeMs,
+		opts:          t.opts,
+		header:        wav.HeaderBytes(t.totalMs(), t.opts),
+		estimatedSize: wav.EstimatedSize(t.totalMs(), t.opts),
+		cache:         c,
+		sf:            sf,
+	}
 }
 
 var _ fs.NodeOpener = (*TrackFile)(nil)
@@ -632,21 +635,13 @@ func (f *TrackFile) Read(_ context.Context, _ fs.FileHandle, dest []byte, off in
 		}
 	}
 
-	// Cache miss: if the read starts within the pre-built header, serve the
-	// header bytes and fill any requested bytes beyond the header with zeros.
-	// Returning a full-sized response (no short read) prevents parsers like
-	// ffprobe from treating the file as truncated. The zero-filled PCM region
-	// is correct silence — the real PCM is served once a PCM-region read
-	// triggers emulation and populates the cache.
+	// Cache miss: a read starting within the header gets only header bytes.
+	// If it asked for more, the short read makes the client come back at the
+	// PCM offset, which renders — metadata probes never trigger emulation.
+	// Short reads are safe here because FOPEN_DIRECT_IO passes them through
+	// to the reader rather than treating them as EOF.
 	if off < int64(len(f.header)) {
-		end := off + int64(len(dest))
-		if end > f.estimatedSize {
-			end = f.estimatedSize
-		}
-		result := make([]byte, end-off)
-		copy(result, f.header[off:])
-		// bytes beyond the header remain zero (silence before render)
-		return gofuse.ReadResultData(result), 0
+		return gofuse.ReadResultData(sliceAt(f.header, dest, off)), 0
 	}
 
 	// Read touches the PCM region: render the full track. singleflight

@@ -142,12 +142,14 @@ FUSE node implementations using `hanwen/go-fuse/v2`'s `NodeFS` API.
 - **`TrackFile`:** Virtual WAV file for one track. Implements `NodeOpener`
   (returns `FOPEN_DIRECT_IO` so all reads bypass the kernel page cache and reach
   our handler), `NodeGetattrer` (reports `wav.EstimatedSize()`), and `NodeReader`.
-  `Read` implements **lazy emulation**: reads that start within the pre-built
-  WAV header (RIFF + `fmt ` + `id3 ` + `LIST INFO` + `data` header) return those bytes plus
-  zero-fill for any requested bytes beyond the header end — a full-sized response
-  that avoids short reads while deferring emulation. Only a read whose offset
-  reaches the PCM region triggers a full render; the result is cached and all
-  subsequent reads (including backward seeks) are served from the LRU cache.
+  `Read` implements **lazy emulation**: a read that starts within the pre-built
+  WAV header (RIFF + `fmt ` + `id3 ` + `LIST INFO` + `data` header) returns only
+  header bytes, even if it asked for more. That short read is safe under
+  `FOPEN_DIRECT_IO`: the client simply reads again at the PCM offset. Only a read
+  whose offset reaches the PCM region triggers a full render; the result is cached
+  and all subsequent reads (including backward seeks) are served from the LRU
+  cache. Never pad a header read with placeholder PCM: sequential readers would
+  hear it as silence at the start of the track.
 
 ### `cmd/chipfs`
 
@@ -205,7 +207,7 @@ internal/vfs.TrackFile.Read(ctx, dest, offset)
   └─ cache MISS:
        │
        ├─ offset < len(header)?
-       │    YES → return header bytes + zero-fill to len(dest)  (no emulation)
+       │    YES → return header bytes only (short read, no emulation)
        │
        └─ NO (read reaches PCM region):
             │  singleflight.Do("Mega_Man_2.nsf\x000") ─── coalesces concurrent misses
@@ -222,8 +224,8 @@ internal/vfs.TrackFile.Read(ctx, dest, offset)
 
 The lazy emulation path is important for cold library scans: Navidrome (and
 tools like ffprobe) read the first few KB of each file to extract metadata.
-Those reads start within the pre-built header and are served as header bytes
-plus silence (zeros), never triggering emulation. Scanning a library of 200
+Those reads start within the pre-built header and are served from it,
+never triggering emulation. Scanning a library of 200
 chiptune files costs no render time.
 
 ---

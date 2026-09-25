@@ -72,15 +72,6 @@ is correctly implemented. Always implement `NodeOpener` alongside `NodeReader`.
 For virtual files that manage their own cache, use `FOPEN_DIRECT_IO` to bypass
 the kernel page cache; for passthrough files, use `FOPEN_KEEP_CACHE`.
 
-**FUSE read buffers are large.** The FUSE kernel module passes read requests
-with the kernel's configured `max_read` buffer (default 128 KB). Never assume
-`len(dest)` in a `NodeReader.Read` call matches the logical data size being
-requested. In particular: a read of offset 0 with `len(dest)=131072` on a file
-whose WAV header is 150 bytes will have `off + len(dest) >> len(header)`. See
-`TrackFile.Read` for the correct pattern: serve header bytes + zero-fill for
-any bytes beyond the header, so clients get a full-sized response without a
-short-read that some parsers treat as EOF.
-
 ## Available Skills
 
 - `/simplify` — After completing an implementation phase, use this to review

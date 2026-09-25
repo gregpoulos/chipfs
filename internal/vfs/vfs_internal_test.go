@@ -3,6 +3,7 @@ package vfs
 // Internal tests (package vfs, not vfs_test) so we can reach unexported types.
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -25,19 +26,7 @@ import (
 func TestTrackFile_ConcurrentReads(t *testing.T) {
 	tracks := buildTrackList("../../testdata/fixtures/pently.nsf", 180_000, 8_000)
 	require.NotNil(t, tracks)
-	t0 := tracks[0]
-	totalMs := t0.totalMs()
-	c := cache.New(256 * 1024 * 1024)
-	tf := &TrackFile{
-		sourcePath:    "../../testdata/fixtures/pently.nsf",
-		trackIdx:      t0.trackIdx,
-		playMs:        t0.playMs,
-		fadeMs:        t0.fadeMs,
-		opts:          t0.opts,
-		header:        wav.HeaderBytes(totalMs, t0.opts),
-		estimatedSize: wav.EstimatedSize(totalMs, t0.opts),
-		cache:         c,
-	}
+	tf := newTrackFile("../../testdata/fixtures/pently.nsf", time.Time{}, tracks[0], cache.New(256*1024*1024), nil)
 
 	// Read from the PCM region so all goroutines trigger a render.
 	pcmOffset := int64(len(tf.header))
@@ -206,12 +195,11 @@ func TestTrackFile_HeaderOnlyRead_NoEmulation(t *testing.T) {
 	assert.Equal(t, header[:12], got, "first 12 bytes must match RIFF header")
 }
 
-// TestTrackFile_LargeBufferRead_HeaderPlusZeros verifies that a read starting
-// in the header region with a buffer larger than the header returns the full
-// requested size (header bytes + silence zeros), not a short read. This
-// matches the behavior expected by streaming parsers like ffprobe which treat
-// short reads on seekable files as truncation errors.
-func TestTrackFile_LargeBufferRead_HeaderPlusZeros(t *testing.T) {
+// TestTrackFile_ReadSpanningHeader_ReturnsHeaderOnly verifies that a large
+// read starting in the header returns just the header (a short read) without
+// rendering, so metadata probes with big buffers stay cheap. The source path
+// cannot be opened, so any render attempt would fail with EIO.
+func TestTrackFile_ReadSpanningHeader_ReturnsHeaderOnly(t *testing.T) {
 	opts := wav.Options{
 		SampleRate: 44100,
 		Channels:   2,
@@ -219,37 +207,46 @@ func TestTrackFile_LargeBufferRead_HeaderPlusZeros(t *testing.T) {
 	}
 	const totalMs = 10_000
 	header := wav.HeaderBytes(totalMs, opts)
-	estimatedSize := wav.EstimatedSize(totalMs, opts)
 	tf := &TrackFile{
 		sourcePath:    "/nonexistent/path/that/cannot/be/opened.nsf",
-		trackIdx:      0,
 		playMs:        totalMs - 8_000,
 		fadeMs:        8_000,
 		opts:          opts,
 		header:        header,
-		estimatedSize: estimatedSize,
-		cache:         nil,
+		estimatedSize: wav.EstimatedSize(totalMs, opts),
 	}
 
-	// Large buffer, as a real FUSE client or ffprobe would use.
-	dest := make([]byte, 65536)
-	result, errno := tf.Read(context.Background(), nil, dest, 0)
-	require.Equal(t, 0, int(errno), "read must not error")
-	require.NotNil(t, result)
+	dest := make([]byte, 131072)
+	result, errno := tf.Read(context.Background(), nil, dest, 4)
+	require.Equal(t, syscall.Errno(0), errno)
+	got, _ := result.Bytes(dest)
+	assert.Equal(t, header[4:], got)
+}
 
-	got, st := result.Bytes(dest)
-	require.Equal(t, 0, int(st))
+// TestTrackFile_ColdSequentialRead_MatchesRender reads a never-rendered track
+// front to back in kernel-sized chunks and verifies the bytes served equal the
+// rendered WAV. The PCM right after the header must be real audio, not
+// placeholder silence served before the render ran.
+func TestTrackFile_ColdSequentialRead_MatchesRender(t *testing.T) {
+	const path = "../../testdata/fixtures/pently.nsf"
+	t0 := buildTrackList(path, 10_000, 1_000)[0]
+	want, err := newTrackFile(path, time.Time{}, t0, nil, nil).renderTrack()
+	require.NoError(t, err)
 
-	// Must return full requested size (no short read).
-	assert.Equal(t, len(dest), len(got), "must return full buffer, not a short read")
-	// First bytes must be the real WAV header.
-	assert.Equal(t, header, got[:len(header)], "header bytes must be correct")
-	// Bytes beyond the header must be zeros (silence before render).
-	for i := len(header); i < len(got); i++ {
-		if got[i] != 0 {
-			t.Fatalf("byte %d beyond header is %d, want 0 (silence)", i, got[i])
+	tf := newTrackFile(path, time.Time{}, t0, cache.New(256*1024*1024), nil)
+	var got []byte
+	dest := make([]byte, 131072)
+	for {
+		result, errno := tf.Read(context.Background(), nil, dest, int64(len(got)))
+		require.Equal(t, syscall.Errno(0), errno)
+		b, _ := result.Bytes(dest)
+		if len(b) == 0 {
+			break
 		}
+		got = append(got, b...)
 	}
+	require.Equal(t, len(want), len(got))
+	assert.True(t, bytes.Equal(want, got), "cold sequential read must match the rendered WAV")
 }
 
 func TestTrackFile_EstimatedSizeMatchesRenderOutput(t *testing.T) {
@@ -258,17 +255,7 @@ func TestTrackFile_EstimatedSizeMatchesRenderOutput(t *testing.T) {
 	tracks := buildTrackList("../../testdata/fixtures/pently.nsf", 180_000, 8_000)
 	require.NotNil(t, tracks)
 
-	// Use track 0; it's short enough with a quick fade for a unit test.
-	t0 := tracks[0]
-	tf := &TrackFile{
-		sourcePath:    "../../testdata/fixtures/pently.nsf",
-		trackIdx:      t0.trackIdx,
-		playMs:        t0.playMs,
-		fadeMs:        t0.fadeMs,
-		opts:          t0.opts,
-		header:        wav.HeaderBytes(t0.totalMs(), t0.opts),
-		estimatedSize: wav.EstimatedSize(t0.totalMs(), t0.opts),
-	}
+	tf := newTrackFile("../../testdata/fixtures/pently.nsf", time.Time{}, tracks[0], nil, nil)
 
 	wavBytes, err := tf.renderTrack()
 	require.NoError(t, err)

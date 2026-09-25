@@ -160,6 +160,12 @@ size_check() {
 size_check "$MOUNT/ode-to-joy/$ode_first" "ode-to-joy (SPC)"
 size_check "$MOUNT/pently/Track_01.wav" "pently track 01 (NSF)"
 
+# A cold read (first play, triggers the render) must serve the same bytes as a
+# cached re-read; otherwise the start of the track is wrong on first play.
+cold=$(sha256sum < "$MOUNT/pently/Track_02.wav")
+cached=$(sha256sum < "$MOUNT/pently/Track_02.wav")
+check_eq "pently track 02 (NSF): cold read == cached read" "$cold" "$cached"
+
 # ── 5. -allow_other flag ──────────────────────────────────────────────────────
 #
 # Unmount the current instance and remount with -allow_other to verify the
