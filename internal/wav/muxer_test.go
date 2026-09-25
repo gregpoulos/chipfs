@@ -2,6 +2,7 @@ package wav_test
 
 import (
 	"encoding/binary"
+	"strings"
 	"testing"
 
 	"github.com/gregpoulos/chipfs/internal/wav"
@@ -118,9 +119,10 @@ func TestEncode_ID3TagContainsExpectedFrames(t *testing.T) {
 	id3Size := int(binary.LittleEndian.Uint32(out[40:44]))
 	id3Bytes := out[44 : 44+id3Size]
 
-	// ID3v2 header: "ID3" + version byte 0x03 (v2.3)
+	// ID3v2 header: "ID3" + version byte 0x04. Text frames are UTF-8, which
+	// only v2.4 defines.
 	assert.Equal(t, []byte("ID3"), id3Bytes[0:3])
-	assert.Equal(t, byte(0x03), id3Bytes[3], "must be ID3v2.3")
+	assert.Equal(t, byte(0x04), id3Bytes[3], "must be ID3v2.4")
 
 	// The raw bytes must contain the expected frame IDs and text values.
 	assert.Contains(t, string(id3Bytes), "TIT2")
@@ -227,4 +229,15 @@ func TestEncode_AlbumArtistWritesTPE2(t *testing.T) {
 func TestEncode_EmptyAlbumArtistOmitsTPE2(t *testing.T) {
 	out := wav.Encode(nil, wav.Options{SampleRate: 44100, Channels: 2, Metadata: wav.Metadata{Title: "x", Artist: "y"}})
 	assert.NotContains(t, string(out), "TPE2")
+}
+
+// ID3v2.4 frame sizes are syncsafe (7 bits per byte), which differs from a
+// plain big-endian size once a frame reaches 128 bytes.
+func TestEncode_ID3FrameSizeIsSyncsafe(t *testing.T) {
+	title := strings.Repeat("x", 200) // frame data = 1 encoding byte + 200 = 201
+	out := wav.Encode(nil, wav.Options{SampleRate: 44100, Channels: 2, Metadata: wav.Metadata{Title: title}})
+
+	id3 := out[44:]
+	require.Equal(t, "TIT2", string(id3[10:14]))
+	assert.Equal(t, []byte{0x00, 0x00, 0x01, 0x49}, id3[14:18], "201 as syncsafe")
 }

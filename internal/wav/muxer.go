@@ -32,7 +32,7 @@ type Options struct {
 }
 
 // Encode encodes the given int16 PCM samples into a complete WAV byte slice.
-// An ID3v2.3 tag is embedded as a RIFF "id3 " chunk and a RIFF "LIST INFO"
+// An ID3v2.4 tag is embedded as a RIFF "id3 " chunk and a RIFF "LIST INFO"
 // chunk before the "data" chunk, providing metadata to both taglib-based
 // scanners (including Navidrome) and older WAV parsers that only read INFO.
 //
@@ -146,7 +146,8 @@ func infoSubchunk(id, text string) []byte {
 	return buf
 }
 
-// buildID3v2 constructs an ID3v2.3 tag from the given metadata.
+// buildID3v2 constructs an ID3v2.4 tag from the given metadata. It is v2.4
+// rather than v2.3 because the frames are UTF-8, which v2.3 does not define.
 // An empty-metadata call still returns the 10-byte ID3v2 header (no frames).
 func buildID3v2(meta Metadata) []byte {
 	var frames []byte
@@ -158,17 +159,17 @@ func buildID3v2(meta Metadata) []byte {
 		frames = append(frames, textFrame("TRCK", strconv.Itoa(meta.Track))...)
 	}
 
-	// ID3v2.3 header: "ID3" + version (0x03 0x00) + flags + syncsafe size
+	// ID3v2.4 header: "ID3" + version (0x04 0x00) + flags + syncsafe size
 	tag := make([]byte, 10, 10+len(frames))
 	copy(tag, "ID3")
-	tag[3] = 0x03 // ID3v2.3
+	tag[3] = 0x04 // ID3v2.4
 	tag[4] = 0x00 // revision
 	tag[5] = 0x00 // no flags
 	syncsafe(tag[6:10], len(frames))
 	return append(tag, frames...)
 }
 
-// textFrame builds an ID3v2.3 text frame (TIT2, TPE1, TALB, TPE2, TRCK).
+// textFrame builds an ID3v2.4 text frame (TIT2, TPE1, TALB, TPE2, TRCK).
 // Returns nil if text is empty.
 func textFrame(id, text string) []byte {
 	if text == "" {
@@ -178,10 +179,7 @@ func textFrame(id, text string) []byte {
 	dataLen := 1 + len(text)
 	frame := make([]byte, 11+len(text))
 	copy(frame[0:4], id)
-	frame[4] = byte(dataLen >> 24)
-	frame[5] = byte(dataLen >> 16)
-	frame[6] = byte(dataLen >> 8)
-	frame[7] = byte(dataLen)
+	syncsafe(frame[4:8], dataLen)
 	// frame[8], frame[9] = 0x00, 0x00 (flags, already zero)
 	frame[10] = 0x03 // UTF-8 encoding
 	copy(frame[11:], text)
