@@ -29,4 +29,4 @@ cleanup() {
 }
 trap cleanup EXIT
 
-exec navidrome
+exec /app/navidrome

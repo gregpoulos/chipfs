@@ -46,7 +46,8 @@ ENTRYPOINT ["/smoke-test.sh"]
 
 # ── Navidrome integration test ────────────────────────────────────────────────
 # Runs chipfs and Navidrome in the same container so the FUSE mount is visible
-# to both without any cross-container mount propagation gymnastics.
+# to both without any cross-container mount propagation gymnastics. Navidrome's
+# official image is Alpine (musl), so chipfs is rebuilt against musl for it.
 #
 # Build: docker build --target navidrome-test -t chipfs-navidrome .
 # Run:   docker run --rm --cap-add SYS_ADMIN --device /dev/fuse \
@@ -54,10 +55,20 @@ ENTRYPOINT ["/smoke-test.sh"]
 #                   -p 4533:4533 chipfs-navidrome
 # Then open http://localhost:4533, create an admin account, and verify that
 # Artist / Album / Title tags are populated correctly for the fixture files.
-FROM runtime AS navidrome-test
+FROM golang:1.26-alpine AS builder-alpine
 
-# Pull the Navidrome binary from the official image — no download at build time.
-COPY --from=deluan/navidrome:latest /app/navidrome /usr/local/bin/navidrome
+RUN apk add --no-cache build-base libgme-dev
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=1 go build -o /chipfs ./cmd/chipfs
+
+FROM deluan/navidrome:latest AS navidrome-test
+
+RUN apk add --no-cache bash fuse3 libgme
+COPY --from=builder-alpine /chipfs /usr/local/bin/chipfs
 
 ENV ND_MUSICFOLDER=/mnt/chipfs \
     ND_DATAFOLDER=/data \
