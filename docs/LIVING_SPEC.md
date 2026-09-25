@@ -81,11 +81,13 @@ chunk provides the same metadata to older WAV parsers (Windows Media Player,
 Winamp) that do not read `id3 `. Both coexist in every output file.
 
 The ID3 tag also carries `TPE2` (album artist) when `Metadata.AlbumArtist` is set;
-it has no `LIST INFO` equivalent. It goes through the same `buildID3v2` path as every
-other frame, so `EstimatedSize` stays exact.
+it has no `LIST INFO` equivalent.
 
 `EstimatedSize(durationMs, opts)` returns the exact byte count for a track of the
-given duration. This value is reported to FUSE in `getattr` before emulation begins.
+given duration; it is reported to FUSE in `getattr` before emulation begins.
+`Encode`, `HeaderBytes` (the pre-PCM prefix served before rendering), and
+`EstimatedSize` all build from one internal header function and `SampleCount`,
+so they cannot disagree. `vfs` sizes its render with `SampleCount` too.
 
 ### `internal/cache`
 

@@ -13,8 +13,7 @@ var stereoOpts = wav.Options{SampleRate: 44100, Channels: 2}
 
 func TestEncode_StartsWithRIFFHeader(t *testing.T) {
 	samples := make([]int16, 100)
-	out, err := wav.Encode(samples, stereoOpts)
-	require.NoError(t, err)
+	out := wav.Encode(samples, stereoOpts)
 
 	assert.Equal(t, []byte("RIFF"), out[0:4], "file must start with RIFF")
 	assert.Equal(t, []byte("WAVE"), out[8:12], "RIFF type must be WAVE")
@@ -22,8 +21,7 @@ func TestEncode_StartsWithRIFFHeader(t *testing.T) {
 
 func TestEncode_FmtChunkIsCorrect(t *testing.T) {
 	samples := make([]int16, 100)
-	out, err := wav.Encode(samples, stereoOpts)
-	require.NoError(t, err)
+	out := wav.Encode(samples, stereoOpts)
 
 	assert.Equal(t, []byte("fmt "), out[12:16])
 
@@ -45,8 +43,7 @@ func TestEncode_FmtChunkIsCorrect(t *testing.T) {
 
 func TestEncode_RIFFSizeMatchesActualLength(t *testing.T) {
 	samples := make([]int16, 88200) // 1 second stereo
-	out, err := wav.Encode(samples, stereoOpts)
-	require.NoError(t, err)
+	out := wav.Encode(samples, stereoOpts)
 
 	// The RIFF size field at bytes [4:8] must equal len(out) - 8
 	riffSize := binary.LittleEndian.Uint32(out[4:8])
@@ -65,15 +62,13 @@ func TestEncode_WithMetadata(t *testing.T) {
 			Track:  3,
 		},
 	}
-	out, err := wav.Encode(samples, opts)
-	require.NoError(t, err)
+	out := wav.Encode(samples, opts)
 	assert.Greater(t, len(out), 44, "output with metadata must be larger than bare WAV header")
 }
 
 func TestEncode_ID3ChunkPresentAfterFmt(t *testing.T) {
 	samples := make([]int16, 100)
-	out, err := wav.Encode(samples, stereoOpts)
-	require.NoError(t, err)
+	out := wav.Encode(samples, stereoOpts)
 
 	// fmt chunk occupies bytes 12–35 (8-byte header + 16-byte data).
 	// id3 chunk must immediately follow.
@@ -83,8 +78,7 @@ func TestEncode_ID3ChunkPresentAfterFmt(t *testing.T) {
 func TestEncode_DataChunkPresent(t *testing.T) {
 	samples := make([]int16, 100)
 	opts := wav.Options{SampleRate: 44100, Channels: 2}
-	out, err := wav.Encode(samples, opts)
-	require.NoError(t, err)
+	out := wav.Encode(samples, opts)
 
 	offset, _ := findChunk(out, "data")
 	require.NotEqual(t, -1, offset, "data chunk must be present")
@@ -95,8 +89,7 @@ func TestEncode_PCMSamplesAreCorrect(t *testing.T) {
 	// Encode a known waveform and verify the bytes appear verbatim in the output.
 	samples := []int16{0x1234, -1, 0x7FFF}
 	opts := wav.Options{SampleRate: 44100, Channels: 1}
-	out, err := wav.Encode(samples, opts)
-	require.NoError(t, err)
+	out := wav.Encode(samples, opts)
 
 	// Find the data chunk and skip its 8-byte header to reach PCM samples.
 	dataOffset, _ := findChunk(out, "data")
@@ -119,8 +112,7 @@ func TestEncode_ID3TagContainsExpectedFrames(t *testing.T) {
 		Channels:   2,
 		Metadata:   wav.Metadata{Title: "Flash Man", Artist: "Tateishi", Album: "Mega Man 2", Track: 5, Year: "1988"},
 	}
-	out, err := wav.Encode(samples, opts)
-	require.NoError(t, err)
+	out := wav.Encode(samples, opts)
 
 	// Extract the raw ID3 tag bytes from the id3 RIFF chunk.
 	id3Size := int(binary.LittleEndian.Uint32(out[40:44]))
@@ -143,37 +135,24 @@ func TestEncode_ID3TagContainsExpectedFrames(t *testing.T) {
 	assert.Contains(t, string(id3Bytes), "1988")
 }
 
-func TestEstimatedSize_WithMetadata(t *testing.T) {
-	// EstimatedSize must also be exact when metadata is non-empty.
-	const durationMs = 5_000
-	opts := wav.Options{
-		SampleRate: 44100,
-		Channels:   2,
-		Metadata:   wav.Metadata{Title: "Guts Man", Artist: "Manami Matsumae", Album: "Mega Man", Track: 1},
+// TestEstimatedSize_MatchesEncode enforces the invariant FUSE getattr relies
+// on: the size reported before rendering equals the rendered file's size, and
+// the header served before rendering is a prefix of the rendered file.
+func TestEstimatedSize_MatchesEncode(t *testing.T) {
+	cases := map[string]wav.Metadata{
+		"no metadata":                   {},
+		"full metadata":                 {Title: "Frog's Theme", Artist: "Uematsu", AlbumArtist: "Mitsuda", Album: "Chrono Trigger", Track: 1},
+		"odd-length id3 tag (pad byte)": {Title: "xy"},
 	}
-	sampleCount := (durationMs * opts.SampleRate / 1000) * opts.Channels
-	actual, err := wav.Encode(make([]int16, sampleCount), opts)
-	require.NoError(t, err)
+	for name, meta := range cases {
+		const durationMs = 2_000
+		opts := wav.Options{SampleRate: 44100, Channels: 2, Metadata: meta}
+		out := wav.Encode(make([]int16, wav.SampleCount(durationMs, opts)), opts)
 
-	assert.Equal(t, int64(len(actual)), wav.EstimatedSize(durationMs, opts))
-}
-
-func TestEstimatedSize_MatchesActualEncodeOutput(t *testing.T) {
-	// EstimatedSize must predict the exact byte length that Encode produces.
-	// This invariant is critical: FUSE getattr uses EstimatedSize before emulation starts,
-	// and a mismatch causes media servers to truncate or reject the stream.
-	const durationMs = 10_000 // 10 seconds
-	opts := wav.Options{SampleRate: 44100, Channels: 2}
-
-	sampleCount := (durationMs * opts.SampleRate / 1000) * opts.Channels
-	samples := make([]int16, sampleCount)
-
-	actual, err := wav.Encode(samples, opts)
-	require.NoError(t, err)
-
-	estimated := wav.EstimatedSize(durationMs, opts)
-	assert.Equal(t, int64(len(actual)), estimated,
-		"EstimatedSize must exactly predict the output of Encode for the same duration")
+		assert.Equal(t, int64(len(out)), wav.EstimatedSize(durationMs, opts), name)
+		header := wav.HeaderBytes(durationMs, opts)
+		assert.Equal(t, out[:len(header)], header, name)
+	}
 }
 
 // findChunk scans a RIFF WAVE file for a top-level chunk with the given 4-byte
@@ -202,8 +181,7 @@ func TestEncode_ListInfoChunkPresent(t *testing.T) {
 		Channels:   2,
 		Metadata:   wav.Metadata{Title: "Flash Man", Artist: "Tateishi", Album: "Mega Man 2"},
 	}
-	out, err := wav.Encode(samples, opts)
-	require.NoError(t, err)
+	out := wav.Encode(samples, opts)
 
 	offset, size := findChunk(out, "LIST")
 	require.NotEqual(t, -1, offset, "LIST chunk must be present")
@@ -227,56 +205,18 @@ func TestEncode_ListInfoChunk_EmptyMetadata(t *testing.T) {
 	// When no metadata fields are set, no LIST chunk should be emitted.
 	samples := make([]int16, 100)
 	opts := wav.Options{SampleRate: 44100, Channels: 2} // no Metadata
-	out, err := wav.Encode(samples, opts)
-	require.NoError(t, err)
+	out := wav.Encode(samples, opts)
 
 	offset, _ := findChunk(out, "LIST")
 	assert.Equal(t, -1, offset, "LIST chunk must be absent when metadata is empty")
 }
 
-func TestHeaderBytes_IsExactPrefixOfEncode(t *testing.T) {
-	// HeaderBytes must produce bytes that are byte-for-byte identical to the
-	// same prefix in Encode. TrackFile.Read serves HeaderBytes for header-only
-	// reads; if they diverge, metadata readers see different data than PCM readers.
-	const durationMs = 5_000
-	opts := wav.Options{
-		SampleRate: 44100,
-		Channels:   2,
-		Metadata: wav.Metadata{
-			Title:  "Flash Man",
-			Artist: "Takashi Tateishi",
-			Album:  "Mega Man 2",
-			Track:  3,
-		},
-	}
-
-	sampleCount := (durationMs * opts.SampleRate / 1000) * opts.Channels
-	samples := make([]int16, sampleCount)
-	full, err := wav.Encode(samples, opts)
-	require.NoError(t, err)
-
-	header := wav.HeaderBytes(durationMs, opts)
-
-	// Header must be a proper prefix of the full WAV.
-	require.Less(t, len(header), len(full), "header must be shorter than full WAV")
-	assert.Equal(t, full[:len(header)], header,
-		"HeaderBytes must be byte-for-byte identical to the corresponding prefix of Encode")
-
-	// The byte immediately after the header is the first PCM sample byte.
-	assert.Equal(t, int64(len(header)), wav.EstimatedSize(durationMs, opts)-int64(sampleCount*2),
-		"header length must equal EstimatedSize minus PCM bytes")
-}
-
-func TestEncode_AlbumArtistWritesTPE2AndKeepsSizeExact(t *testing.T) {
-	const durationMs = 2_000
-	opts := wav.Options{
+func TestEncode_AlbumArtistWritesTPE2(t *testing.T) {
+	out := wav.Encode(nil, wav.Options{
 		SampleRate: 44100,
 		Channels:   2,
 		Metadata:   wav.Metadata{Title: "Frog's Theme", Artist: "Uematsu", AlbumArtist: "Mitsuda", Album: "Chrono Trigger", Track: 1},
-	}
-	sampleCount := (durationMs * opts.SampleRate / 1000) * opts.Channels
-	out, err := wav.Encode(make([]int16, sampleCount), opts)
-	require.NoError(t, err)
+	})
 
 	id3Size := int(binary.LittleEndian.Uint32(out[40:44]))
 	id3Bytes := string(out[44 : 44+id3Size])
@@ -284,13 +224,9 @@ func TestEncode_AlbumArtistWritesTPE2AndKeepsSizeExact(t *testing.T) {
 	assert.Contains(t, id3Bytes, "Mitsuda")
 	assert.Contains(t, id3Bytes, "TPE1", "track artist must remain")
 	assert.Contains(t, id3Bytes, "Uematsu")
-
-	assert.Equal(t, int64(len(out)), wav.EstimatedSize(durationMs, opts))
-	assert.Equal(t, out[:len(wav.HeaderBytes(durationMs, opts))], wav.HeaderBytes(durationMs, opts))
 }
 
 func TestEncode_EmptyAlbumArtistOmitsTPE2(t *testing.T) {
-	out, err := wav.Encode(nil, wav.Options{SampleRate: 44100, Channels: 2, Metadata: wav.Metadata{Title: "x", Artist: "y"}})
-	require.NoError(t, err)
+	out := wav.Encode(nil, wav.Options{SampleRate: 44100, Channels: 2, Metadata: wav.Metadata{Title: "x", Artist: "y"}})
 	assert.NotContains(t, string(out), "TPE2")
 }

@@ -9,6 +9,7 @@ package wav
 
 import (
 	"encoding/binary"
+	"slices"
 	"strconv"
 )
 
@@ -40,132 +41,68 @@ type Options struct {
 // Output layout:
 //
 //	RIFF header (12 bytes) → fmt chunk (24 bytes) → id3 chunk → LIST INFO chunk → data chunk
-func Encode(samples []int16, opts Options) ([]byte, error) {
-	id3Data := buildID3v2(opts.Metadata)
-	id3PaddedSize := paddedSize(len(id3Data))
-	listInfo := buildListInfo(opts.Metadata)
+func Encode(samples []int16, opts Options) []byte {
 	pcmBytes := len(samples) * 2
+	b := header(pcmBytes, opts)
+	n := len(b)
+	b = slices.Grow(b, pcmBytes)[:n+pcmBytes]
+	for i, s := range samples {
+		binary.LittleEndian.PutUint16(b[n+2*i:], uint16(s))
+	}
+	return b
+}
 
-	totalSize := 12 + 24 + 8 + id3PaddedSize + len(listInfo) + 8 + pcmBytes
-	buf := make([]byte, totalSize)
-	pos := 0
+// HeaderBytes returns the prefix of Encode's output for a track of the given
+// duration: everything up to and including the "data" chunk header, with no
+// PCM samples. It can be served before the track is rendered.
+func HeaderBytes(durationMs int, opts Options) []byte {
+	return header(SampleCount(durationMs, opts)*2, opts)
+}
 
-	// RIFF header
-	pos += copy(buf[pos:], "RIFF")
-	binary.LittleEndian.PutUint32(buf[pos:], uint32(totalSize-8))
-	pos += 4
-	pos += copy(buf[pos:], "WAVE")
+// EstimatedSize returns the exact byte length Encode produces for a track of
+// the given duration, so it can be reported as the file size before rendering.
+func EstimatedSize(durationMs int, opts Options) int64 {
+	return int64(len(HeaderBytes(durationMs, opts)) + SampleCount(durationMs, opts)*2)
+}
 
-	// fmt chunk (always 16-byte PCM)
-	pos += copy(buf[pos:], "fmt ")
-	binary.LittleEndian.PutUint32(buf[pos:], 16)
-	pos += 4
-	binary.LittleEndian.PutUint16(buf[pos:], 1) // PCM
-	pos += 2
-	binary.LittleEndian.PutUint16(buf[pos:], uint16(opts.Channels))
-	pos += 2
-	binary.LittleEndian.PutUint32(buf[pos:], uint32(opts.SampleRate))
-	pos += 4
-	binary.LittleEndian.PutUint32(buf[pos:], uint32(opts.SampleRate*opts.Channels*2)) // byte rate
-	pos += 4
-	binary.LittleEndian.PutUint16(buf[pos:], uint16(opts.Channels*2)) // block align
-	pos += 2
-	binary.LittleEndian.PutUint16(buf[pos:], 16) // bits per sample
-	pos += 2
+// SampleCount returns the number of interleaved int16 samples in a track of
+// the given duration.
+func SampleCount(durationMs int, opts Options) int {
+	return (durationMs * opts.SampleRate / 1000) * opts.Channels
+}
 
-	// id3 chunk
-	pos += copy(buf[pos:], "id3 ")
-	binary.LittleEndian.PutUint32(buf[pos:], uint32(len(id3Data)))
-	pos += 4
-	pos += copy(buf[pos:], id3Data)
-	pos += id3PaddedSize - len(id3Data) // zero pad byte if needed
+// header builds every byte of the WAV file before the PCM data, for a data
+// chunk of pcmBytes.
+func header(pcmBytes int, opts Options) []byte {
+	le := binary.LittleEndian
+	id3 := buildID3v2(opts.Metadata)
 
-	// LIST INFO chunk (omitted when metadata is empty)
-	pos += copy(buf[pos:], listInfo)
+	b := append([]byte("RIFF"), 0, 0, 0, 0) // size patched below
+	b = append(b, "WAVE"...)
 
-	// data chunk
-	pos += copy(buf[pos:], "data")
-	binary.LittleEndian.PutUint32(buf[pos:], uint32(pcmBytes))
-	pos += 4
-	for _, s := range samples {
-		binary.LittleEndian.PutUint16(buf[pos:], uint16(s))
-		pos += 2
+	b = append(b, "fmt "...)
+	b = le.AppendUint32(b, 16) // always 16-byte PCM
+	b = le.AppendUint16(b, 1)  // PCM
+	b = le.AppendUint16(b, uint16(opts.Channels))
+	b = le.AppendUint32(b, uint32(opts.SampleRate))
+	b = le.AppendUint32(b, uint32(opts.SampleRate*opts.Channels*2)) // byte rate
+	b = le.AppendUint16(b, uint16(opts.Channels*2))                 // block align
+	b = le.AppendUint16(b, 16)                                      // bits per sample
+
+	b = append(b, "id3 "...)
+	b = le.AppendUint32(b, uint32(len(id3)))
+	b = append(b, id3...)
+	if len(id3)%2 == 1 {
+		b = append(b, 0) // RIFF pad byte
 	}
 
-	return buf, nil
-}
+	b = append(b, buildListInfo(opts.Metadata)...) // omitted when metadata is empty
 
-// HeaderBytes returns the WAV file prefix up to (and including) the 8-byte
-// "data" chunk header, but not including any PCM samples. Its length equals
-// EstimatedSize(durationMs, opts) minus the PCM byte count.
-//
-// This prefix contains the RIFF header, fmt chunk, and id3 chunk — everything
-// Navidrome needs to read track metadata. TrackFile.Read serves these bytes
-// directly without triggering emulation when a read falls entirely before the
-// PCM region.
-func HeaderBytes(durationMs int, opts Options) []byte {
-	id3Data := buildID3v2(opts.Metadata)
-	id3PaddedSize := paddedSize(len(id3Data))
-	listInfo := buildListInfo(opts.Metadata)
-	pcmBytes := (durationMs * opts.SampleRate / 1000) * opts.Channels * 2
-	totalSize := 12 + 24 + 8 + id3PaddedSize + len(listInfo) + 8 + pcmBytes
+	b = append(b, "data"...)
+	b = le.AppendUint32(b, uint32(pcmBytes))
 
-	headerLen := 12 + 24 + 8 + id3PaddedSize + len(listInfo) + 8
-	buf := make([]byte, headerLen)
-	pos := 0
-
-	// RIFF header
-	pos += copy(buf[pos:], "RIFF")
-	binary.LittleEndian.PutUint32(buf[pos:], uint32(totalSize-8))
-	pos += 4
-	pos += copy(buf[pos:], "WAVE")
-
-	// fmt chunk (always 16-byte PCM)
-	pos += copy(buf[pos:], "fmt ")
-	binary.LittleEndian.PutUint32(buf[pos:], 16)
-	pos += 4
-	binary.LittleEndian.PutUint16(buf[pos:], 1) // PCM
-	pos += 2
-	binary.LittleEndian.PutUint16(buf[pos:], uint16(opts.Channels))
-	pos += 2
-	binary.LittleEndian.PutUint32(buf[pos:], uint32(opts.SampleRate))
-	pos += 4
-	binary.LittleEndian.PutUint32(buf[pos:], uint32(opts.SampleRate*opts.Channels*2))
-	pos += 4
-	binary.LittleEndian.PutUint16(buf[pos:], uint16(opts.Channels*2))
-	pos += 2
-	binary.LittleEndian.PutUint16(buf[pos:], 16) // bits per sample
-	pos += 2
-
-	// id3 chunk
-	pos += copy(buf[pos:], "id3 ")
-	binary.LittleEndian.PutUint32(buf[pos:], uint32(len(id3Data)))
-	pos += 4
-	pos += copy(buf[pos:], id3Data)
-	pos += id3PaddedSize - len(id3Data)
-
-	// LIST INFO chunk (omitted when metadata is empty)
-	pos += copy(buf[pos:], listInfo)
-
-	// data chunk header (size field only, no PCM bytes)
-	pos += copy(buf[pos:], "data")
-	binary.LittleEndian.PutUint32(buf[pos:], uint32(pcmBytes))
-
-	return buf
-}
-
-// EstimatedSize returns the exact byte length that Encode will produce for a
-// track of the given duration. This is used to populate the FUSE getattr file
-// size before emulation begins, allowing media servers to allocate buffers
-// correctly.
-//
-// The estimate is exact because WAV/PCM file size is fully determined by
-// duration, sample rate, channel count, and the fixed-size ID3v2 tag.
-func EstimatedSize(durationMs int, opts Options) int64 {
-	id3PaddedSize := paddedSize(len(buildID3v2(opts.Metadata)))
-	listInfoSize := len(buildListInfo(opts.Metadata))
-	pcmBytes := (durationMs * opts.SampleRate / 1000) * opts.Channels * 2
-	return int64(12 + 24 + 8 + id3PaddedSize + listInfoSize + 8 + pcmBytes)
+	le.PutUint32(b[4:], uint32(len(b)-8+pcmBytes))
+	return b
 }
 
 // buildListInfo constructs a RIFF LIST INFO chunk containing INAM (title),
@@ -266,9 +203,9 @@ func commentFrame(comment string) []byte {
 	}
 	// data = encoding (1) + language (3) + short desc null (1) + text
 	data := make([]byte, 5+len(comment))
-	data[0] = 0x03          // UTF-8
-	copy(data[1:4], "eng")  // language
-	data[4] = 0x00          // empty short description, null-terminated
+	data[0] = 0x03         // UTF-8
+	copy(data[1:4], "eng") // language
+	data[4] = 0x00         // empty short description, null-terminated
 	copy(data[5:], comment)
 
 	frame := make([]byte, 10+len(data)) // header (10) + data

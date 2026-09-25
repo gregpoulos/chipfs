@@ -112,7 +112,7 @@ func run(filePath string, trackIdx int, outPath string, overrideDurationMs, over
 	if title == "" {
 		title = fmt.Sprintf("Track %d", trackIdx+1)
 	}
-	wavData, err := wav.Encode(allSamples, wav.Options{
+	wavData := wav.Encode(allSamples, wav.Options{
 		SampleRate: 44100,
 		Channels:   2,
 		Metadata: wav.Metadata{
@@ -122,9 +122,6 @@ func run(filePath string, trackIdx int, outPath string, overrideDurationMs, over
 			Track:  trackIdx + 1,
 		},
 	})
-	if err != nil {
-		return fmt.Errorf("encoding WAV: %w", err)
-	}
 
 	if err := os.WriteFile(outPath, wavData, 0644); err != nil {
 		return fmt.Errorf("writing output: %w", err)

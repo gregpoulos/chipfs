@@ -717,10 +717,9 @@ func (f *TrackFile) renderTrack() ([]byte, error) {
 	emu.SetFade(f.playMs, f.fadeMs)
 
 	const chunkLen = 4096
-	sr, ch := f.opts.SampleRate, f.opts.Channels
-	maxSamples := ((maxPlayMs + maxFadeMs) * sr / 1000) * ch
-	capacity := ((f.playMs + f.fadeMs) * sr / 1000) * ch
-	allSamples := make([]int16, 0, capacity)
+	maxSamples := wav.SampleCount(maxPlayMs+maxFadeMs, f.opts)
+	expectedSamples := wav.SampleCount(f.playMs+f.fadeMs, f.opts)
+	allSamples := make([]int16, 0, expectedSamples)
 	chunk := make([]int16, chunkLen)
 
 	for !emu.TrackEnded() && len(allSamples) < maxSamples {
@@ -730,8 +729,7 @@ func (f *TrackFile) renderTrack() ([]byte, error) {
 		allSamples = append(allSamples, chunk...)
 	}
 
-	expectedSamples := ((f.playMs + f.fadeMs) * sr / 1000) * ch
-	return wav.Encode(fitSamples(allSamples, expectedSamples), f.opts)
+	return wav.Encode(fitSamples(allSamples, expectedSamples), f.opts), nil
 }
 
 // fitSamples forces samples to exactly n values so the rendered WAV size

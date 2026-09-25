@@ -44,8 +44,9 @@ anywhere.
 **The WAV muxer's `EstimatedSize` must exactly match `Encode` output** for the
 same duration and options. This invariant is critical: FUSE `getattr` reports
 `EstimatedSize` before emulation begins, and any mismatch causes media servers
-to truncate or reject the stream. The test `TestEstimatedSize_MatchesActualEncodeOutput`
-enforces this.
+to truncate or reject the stream. All three of `Encode`, `HeaderBytes`, and
+`EstimatedSize` derive from one header builder and `SampleCount`; keep it that
+way. `TestEstimatedSize_MatchesEncode` guards it.
 
 ## Known Pitfalls
 
