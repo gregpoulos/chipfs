@@ -62,9 +62,9 @@ trap cleanup EXIT
 echo "── 1. Root directory ────────────────────────────────────────────────────────"
 
 for f in pently.nsf pently-demo.nsfe seaside-village.gbs ode-to-joy.spc; do
-    [[ -f "$MOUNT/$f" ]] \
-        && pass "real file '$f' present" \
-        || fail "real file '$f' missing"
+    cmp -s "$SOURCE/$f" "$MOUNT/$f" \
+        && pass "real file '$f' reads back identical" \
+        || fail "real file '$f' missing or differs"
 done
 
 for d in pently pently-demo seaside-village ode-to-joy; do

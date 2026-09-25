@@ -106,8 +106,7 @@ type Root struct {
 	sourceDir     string
 	defaultPlayMs int
 	defaultFadeMs int
-	cache         *cache.Cache
-	sf            *singleflight.Group
+	store         *trackStore
 }
 
 var _ fs.NodeOnAdder = (*Root)(nil)
@@ -137,8 +136,7 @@ func NewRoot(sourceDir string, opts Options) (*Root, error) {
 		sourceDir:     sourceDir,
 		defaultPlayMs: opts.DefaultPlayMs,
 		defaultFadeMs: opts.DefaultFadeMs,
-		cache:         cache.New(opts.CacheBytes),
-		sf:            &singleflight.Group{},
+		store:         newTrackStore(opts.CacheBytes),
 	}, nil
 }
 
@@ -203,8 +201,7 @@ func (r *Root) populate(ctx context.Context, parent *fs.Inode, dir string) {
 				sourcePath: fullPath,
 				mtime:      entryMtime(e),
 				tracks:     tracks,
-				cache:      r.cache,
-				sf:         r.sf,
+				store:      r.store,
 			},
 		})
 	}
@@ -282,7 +279,6 @@ type RealFile struct {
 
 var _ fs.NodeOpener = (*RealFile)(nil)
 var _ fs.NodeGetattrer = (*RealFile)(nil)
-var _ fs.NodeReader = (*RealFile)(nil)
 
 // Open opens the underlying file and returns a realFileHandle that holds the
 // fd across all reads. go-fuse calls Release when the last open fd is closed.
@@ -303,22 +299,6 @@ func (f *RealFile) Getattr(_ context.Context, _ fs.FileHandle, out *gofuse.AttrO
 	out.Size = uint64(st.Size())
 	setTimes(&out.Attr, st.ModTime())
 	return 0
-}
-
-// Read is a fallback for reads that arrive without an associated file handle
-// (e.g. direct NodeReader calls in tests). Normal FUSE reads go through
-// realFileHandle.Read once Open returns a handle.
-func (f *RealFile) Read(_ context.Context, _ fs.FileHandle, dest []byte, off int64) (gofuse.ReadResult, syscall.Errno) {
-	file, err := os.Open(f.path)
-	if err != nil {
-		return nil, syscall.EIO
-	}
-	defer file.Close()
-	n, err := file.ReadAt(dest, off)
-	if err != nil && err != io.EOF {
-		return nil, syscall.EIO
-	}
-	return gofuse.ReadResultData(dest[:n]), 0
 }
 
 // ---------------------------------------------------------------------------
@@ -559,8 +539,7 @@ type ChipDir struct {
 	sourcePath string
 	mtime      time.Time // source file's mtime, reported for the dir and its tracks
 	tracks     []trackEntry
-	cache      *cache.Cache
-	sf         *singleflight.Group
+	store      *trackStore
 }
 
 var _ fs.NodeOnAdder = (*ChipDir)(nil)
@@ -574,7 +553,7 @@ func (d *ChipDir) Getattr(_ context.Context, _ fs.FileHandle, out *gofuse.AttrOu
 
 func (d *ChipDir) OnAdd(ctx context.Context) {
 	for _, t := range d.tracks {
-		tf := newTrackFile(d.sourcePath, d.mtime, t, d.cache, d.sf)
+		tf := newTrackFile(d.sourcePath, d.mtime, t, d.store)
 		ch := d.NewPersistentInode(ctx, tf, fs.StableAttr{Mode: syscall.S_IFREG})
 		d.AddChild(t.filename, ch, false)
 	}
@@ -592,30 +571,22 @@ func (d *ChipDir) OnAdd(ctx context.Context) {
 // run the emulator, cache the result, and serve from cache thereafter.
 type TrackFile struct {
 	fs.Inode
+	trackEntry
 	sourcePath    string
 	mtime         time.Time // source file's mtime
-	trackIdx      int
-	playMs        int
-	fadeMs        int
-	opts          wav.Options
-	header        []byte // WAV bytes before PCM data; pre-built at construction
+	header        []byte    // WAV bytes before PCM data; pre-built at construction
 	estimatedSize int64
-	cache         *cache.Cache
-	sf            *singleflight.Group
+	store         *trackStore
 }
 
-func newTrackFile(sourcePath string, mtime time.Time, t trackEntry, c *cache.Cache, sf *singleflight.Group) *TrackFile {
+func newTrackFile(sourcePath string, mtime time.Time, t trackEntry, store *trackStore) *TrackFile {
 	return &TrackFile{
+		trackEntry:    t,
 		sourcePath:    sourcePath,
 		mtime:         mtime,
-		trackIdx:      t.trackIdx,
-		playMs:        t.playMs,
-		fadeMs:        t.fadeMs,
-		opts:          t.opts,
 		header:        wav.HeaderBytes(t.totalMs(), t.opts),
 		estimatedSize: wav.EstimatedSize(t.totalMs(), t.opts),
-		cache:         c,
-		sf:            sf,
+		store:         store,
 	}
 }
 
@@ -648,10 +619,8 @@ func (f *TrackFile) Read(_ context.Context, _ fs.FileHandle, dest []byte, off in
 		}
 	}()
 	// Cache hit: full WAV already rendered.
-	if f.cache != nil {
-		if data, ok := f.cache.Get(f.sourcePath, f.trackIdx); ok {
-			return gofuse.ReadResultData(sliceAt(data, dest, off)), 0
-		}
+	if data, ok := f.store.cache.Get(f.sourcePath, f.trackIdx); ok {
+		return gofuse.ReadResultData(sliceAt(data, dest, off)), 0
 	}
 
 	// Cache miss: a read starting within the header gets only header bytes.
@@ -663,32 +632,46 @@ func (f *TrackFile) Read(_ context.Context, _ fs.FileHandle, dest []byte, off in
 		return gofuse.ReadResultData(sliceAt(f.header, dest, off)), 0
 	}
 
-	// Read touches the PCM region: render the full track. singleflight
-	// ensures that concurrent misses for the same (sourcePath, trackIdx)
-	// share a single render rather than duplicating the work.
-	var (
-		wavBytes []byte
-		err      error
-	)
-	if f.sf != nil {
-		key := fmt.Sprintf("%s\x00%d", f.sourcePath, f.trackIdx)
-		v, sfErr, _ := f.sf.Do(key, func() (any, error) {
-			return f.renderTrack()
-		})
-		if sfErr != nil {
-			return nil, syscall.EIO
-		}
-		wavBytes = v.([]byte)
-	} else {
-		wavBytes, err = f.renderTrack()
-		if err != nil {
-			return nil, syscall.EIO
-		}
-	}
-	if f.cache != nil {
-		f.cache.Set(f.sourcePath, f.trackIdx, wavBytes)
+	wavBytes, err := f.store.render(f)
+	if err != nil {
+		log.Printf("vfs: rendering %s track %d: %v", f.sourcePath, f.trackIdx+1, err)
+		return nil, syscall.EIO
 	}
 	return gofuse.ReadResultData(sliceAt(wavBytes, dest, off)), 0
+}
+
+// trackStore holds rendered tracks shared by every TrackFile: an LRU cache of
+// finished WAVs plus coalescing of concurrent renders of the same track.
+type trackStore struct {
+	cache *cache.Cache
+	sf    singleflight.Group
+}
+
+func newTrackStore(cacheBytes int64) *trackStore {
+	return &trackStore{cache: cache.New(cacheBytes)}
+}
+
+// render returns f's rendered WAV, rendering it at most once however many
+// readers ask concurrently. The cache is filled inside the coalesced call, so
+// a reader arriving just after a render finishes gets a cache hit rather than
+// starting a second render.
+func (s *trackStore) render(f *TrackFile) ([]byte, error) {
+	key := fmt.Sprintf("%s\x00%d", f.sourcePath, f.trackIdx)
+	v, err, _ := s.sf.Do(key, func() (any, error) {
+		if data, ok := s.cache.Get(f.sourcePath, f.trackIdx); ok {
+			return data, nil
+		}
+		data, err := f.renderTrack()
+		if err != nil {
+			return nil, err
+		}
+		s.cache.Set(f.sourcePath, f.trackIdx, data)
+		return data, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return v.([]byte), nil
 }
 
 // renderTrack opens the source file, runs the emulator for the configured
@@ -754,7 +737,7 @@ func RenderTrack(path string, trackIdx, playMs, fadeMs int, opts Options) (Rende
 	t.playMs = clampMs(playMs, t.playMs, maxPlayMs)
 	t.fadeMs = clampMs(fadeMs, t.fadeMs, maxFadeMs)
 
-	data, err := newTrackFile(path, time.Time{}, t, nil, nil).renderTrack()
+	data, err := newTrackFile(path, time.Time{}, t, nil).renderTrack()
 	if err != nil {
 		return RenderedTrack{}, err
 	}

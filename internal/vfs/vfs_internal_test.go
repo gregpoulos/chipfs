@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gregpoulos/chipfs/internal/cache"
 	"github.com/gregpoulos/chipfs/internal/wav"
 	"github.com/hanwen/go-fuse/v2/fs"
 	gofuse "github.com/hanwen/go-fuse/v2/fuse"
@@ -26,7 +25,7 @@ import (
 func TestTrackFile_ConcurrentReads(t *testing.T) {
 	tracks := buildTrackList("../../testdata/fixtures/pently.nsf", 180_000, 8_000)
 	require.NotNil(t, tracks)
-	tf := newTrackFile("../../testdata/fixtures/pently.nsf", time.Time{}, tracks[0], cache.New(256*1024*1024), nil)
+	tf := newTrackFile("../../testdata/fixtures/pently.nsf", time.Time{}, tracks[0], newTrackStore(256*1024*1024))
 
 	// Read from the PCM region so all goroutines trigger a render.
 	pcmOffset := int64(len(tf.header))
@@ -81,22 +80,11 @@ func TestTrackFile_Read_RenderErrorReturnsEIO(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, corrupt, 0600))
 
 	opts := wav.Options{SampleRate: 44100, Channels: 2}
-	const totalMs = 1000
-	header := wav.HeaderBytes(totalMs, opts)
-	tf := &TrackFile{
-		sourcePath:    path,
-		trackIdx:      0,
-		playMs:        900,
-		fadeMs:        100,
-		opts:          opts,
-		header:        header,
-		estimatedSize: wav.EstimatedSize(totalMs, opts),
-		cache:         nil,
-	}
+	tf := newTrackFile(path, time.Time{}, trackEntry{playMs: 900, fadeMs: 100, opts: opts}, newTrackStore(1<<20))
 
 	// Read at PCM offset to trigger renderTrack with the corrupt source.
 	dest := make([]byte, 65536)
-	result, errno := tf.Read(context.Background(), nil, dest, int64(len(header)))
+	result, errno := tf.Read(context.Background(), nil, dest, int64(len(tf.header)))
 
 	assert.Equal(t, syscall.EIO, errno, "render error must return EIO")
 	assert.Nil(t, result, "render error must return nil result")
@@ -162,39 +150,6 @@ func TestSanitizeFilename_RejectsDotDot(t *testing.T) {
 	assert.Equal(t, "file.name", sanitizeFilename("file.name"))
 }
 
-func TestTrackFile_HeaderOnlyRead_NoEmulation(t *testing.T) {
-	// Build a TrackFile with a known header but a source path that cannot be
-	// opened by the emulator. If Read correctly serves from the pre-built
-	// header without calling renderTrack, the test passes even though
-	// rendering would fail.
-	opts := wav.Options{
-		SampleRate: 44100,
-		Channels:   2,
-		Metadata:   wav.Metadata{Title: "Test Track", Album: "Test Game"},
-	}
-	const totalMs = 10_000
-	header := wav.HeaderBytes(totalMs, opts)
-	tf := &TrackFile{
-		sourcePath:    "/nonexistent/path/that/cannot/be/opened.nsf",
-		trackIdx:      0,
-		playMs:        totalMs - 8_000,
-		fadeMs:        8_000,
-		opts:          opts,
-		header:        header,
-		estimatedSize: wav.EstimatedSize(totalMs, opts),
-		cache:         nil, // no cache — forces the header-only path
-	}
-
-	dest := make([]byte, 12) // first 12 bytes = RIFF chunk header
-	result, errno := tf.Read(context.Background(), nil, dest, 0)
-	require.Equal(t, 0, int(errno))
-	require.NotNil(t, result)
-
-	got, st := result.Bytes(dest)
-	require.Equal(t, 0, int(st))
-	assert.Equal(t, header[:12], got, "first 12 bytes must match RIFF header")
-}
-
 // TestTrackFile_ReadSpanningHeader_ReturnsHeaderOnly verifies that a large
 // read starting in the header returns just the header (a short read) without
 // rendering, so metadata probes with big buffers stay cheap. The source path
@@ -205,22 +160,14 @@ func TestTrackFile_ReadSpanningHeader_ReturnsHeaderOnly(t *testing.T) {
 		Channels:   2,
 		Metadata:   wav.Metadata{Title: "Test Track", Album: "Test Game"},
 	}
-	const totalMs = 10_000
-	header := wav.HeaderBytes(totalMs, opts)
-	tf := &TrackFile{
-		sourcePath:    "/nonexistent/path/that/cannot/be/opened.nsf",
-		playMs:        totalMs - 8_000,
-		fadeMs:        8_000,
-		opts:          opts,
-		header:        header,
-		estimatedSize: wav.EstimatedSize(totalMs, opts),
-	}
+	tf := newTrackFile("/nonexistent/path/that/cannot/be/opened.nsf", time.Time{},
+		trackEntry{playMs: 2_000, fadeMs: 8_000, opts: opts}, newTrackStore(1<<20))
 
 	dest := make([]byte, 131072)
 	result, errno := tf.Read(context.Background(), nil, dest, 4)
 	require.Equal(t, syscall.Errno(0), errno)
 	got, _ := result.Bytes(dest)
-	assert.Equal(t, header[4:], got)
+	assert.Equal(t, tf.header[4:], got)
 }
 
 // TestTrackFile_ColdSequentialRead_MatchesRender reads a never-rendered track
@@ -230,10 +177,10 @@ func TestTrackFile_ReadSpanningHeader_ReturnsHeaderOnly(t *testing.T) {
 func TestTrackFile_ColdSequentialRead_MatchesRender(t *testing.T) {
 	const path = "../../testdata/fixtures/pently.nsf"
 	t0 := buildTrackList(path, 10_000, 1_000)[0]
-	want, err := newTrackFile(path, time.Time{}, t0, nil, nil).renderTrack()
+	want, err := newTrackFile(path, time.Time{}, t0, nil).renderTrack()
 	require.NoError(t, err)
 
-	tf := newTrackFile(path, time.Time{}, t0, cache.New(256*1024*1024), nil)
+	tf := newTrackFile(path, time.Time{}, t0, newTrackStore(256*1024*1024))
 	var got []byte
 	dest := make([]byte, 131072)
 	for {
@@ -255,7 +202,7 @@ func TestTrackFile_EstimatedSizeMatchesRenderOutput(t *testing.T) {
 	tracks := buildTrackList("../../testdata/fixtures/pently.nsf", 180_000, 8_000)
 	require.NotNil(t, tracks)
 
-	tf := newTrackFile("../../testdata/fixtures/pently.nsf", time.Time{}, tracks[0], nil, nil)
+	tf := newTrackFile("../../testdata/fixtures/pently.nsf", time.Time{}, tracks[0], nil)
 
 	wavBytes, err := tf.renderTrack()
 	require.NoError(t, err)

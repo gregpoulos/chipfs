@@ -198,7 +198,8 @@ internal/vfs.TrackFile.Read(ctx, dest, offset)
        │    YES → return header bytes only (short read, no emulation)
        │
        └─ NO (read reaches PCM region):
-            │  singleflight.Do("Mega_Man_2.nsf\x000") ─── coalesces concurrent misses
+            │  trackStore.render: singleflight.Do("Mega_Man_2.nsf\x000") ─── coalesces concurrent misses
+            │    cache hit (a render just finished)? → use it
             │    os.ReadFile("Mega_Man_2.nsf")
             │    gme.Open(nsfBytes, sampleRate=44100)
             │    emu.StartTrack(0)
@@ -206,7 +207,7 @@ internal/vfs.TrackFile.Read(ctx, dest, offset)
             │    loop: emu.Play(chunk) → append to buffer
             │    trim samples to exact expected count
             │    wav.Encode(allSamples, opts) → wavBytes
-            │  cache.Set("Mega_Man_2.nsf", 0, wavBytes)
+            │    cache.Set("Mega_Man_2.nsf", 0, wavBytes)
             └─ copy bytes from wavBytes[offset:offset+size], return
 ```
 
