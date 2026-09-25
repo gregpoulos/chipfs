@@ -26,8 +26,8 @@ func parseArgs(args []string) (config, error) {
 	source := fset.String("source", "", "path to directory containing chiptune files (required)")
 	mountpoint := fset.String("mountpoint", "", "path to FUSE mount point (required)")
 	allowOther := fset.Bool("allow_other", false, "allow other users (e.g. Docker containers) to access the mount")
-	defaultLength := fset.Int("default_length", 180, "default play duration in seconds for tracks without embedded duration")
-	fadeLength := fset.Int("fade_length", 8, "fade-out duration in seconds")
+	defaultLength := fset.Int("default_length", 180, "play duration in seconds for tracks without embedded duration (max 1200)")
+	fadeLength := fset.Int("fade_length", 8, "fade-out duration in seconds for tracks without embedded fade (max 60)")
 	cacheSizeMb := fset.Int("cache_size_mb", 256, "LRU cache capacity in MB")
 	if err := fset.Parse(args); err != nil {
 		return config{}, err

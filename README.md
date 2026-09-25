@@ -49,8 +49,8 @@ macOS support is best-effort. The primary deployment target is Linux.
 | `-source` | *(required)* | Directory containing your chiptune files |
 | `-mountpoint` | *(required)* | Empty directory to mount the virtual filesystem |
 | `-allow_other` | `false` | Allow other users (e.g. a Navidrome Docker container) to read the mount |
-| `-default_length` | `180` | Default play duration in seconds for tracks without embedded duration metadata |
-| `-fade_length` | `8` | Fade-out duration in seconds |
+| `-default_length` | `180` | Play duration in seconds for tracks without embedded duration metadata (max 1200) |
+| `-fade_length` | `8` | Fade-out duration in seconds for tracks without embedded fade metadata (max 60) |
 | `-cache_size_mb` | `256` | LRU cache capacity in MB |
 
 ### Using with Navidrome in Docker

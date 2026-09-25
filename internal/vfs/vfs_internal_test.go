@@ -63,6 +63,8 @@ func TestClampMs(t *testing.T) {
 	// over max → capped
 	assert.Equal(t, 20*60*1000, clampMs(25*60*1000, 180_000, 20*60*1000))
 	assert.Equal(t, 20*60*1000, clampMs(99*60*1000, 180_000, 20*60*1000))
+	// default over max → capped too (e.g. -default_length 1500)
+	assert.Equal(t, 20*60*1000, clampMs(0, 25*60*1000, 20*60*1000))
 }
 
 // TestTrackFile_Read_RenderErrorReturnsEIO verifies that a render failure

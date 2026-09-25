@@ -787,16 +787,12 @@ func entryMtime(e os.DirEntry) time.Time {
 	return info.ModTime()
 }
 
-// clampMs returns ms if it is in (0, maxMs]; returns defaultMs if ms <= 0;
-// returns maxMs if ms > maxMs.
+// clampMs returns ms, or defaultMs if ms <= 0, capped at maxMs either way.
 func clampMs(ms, defaultMs, maxMs int) int {
 	if ms <= 0 {
-		return defaultMs
+		ms = defaultMs
 	}
-	if ms > maxMs {
-		return maxMs
-	}
-	return ms
+	return min(ms, maxMs)
 }
 
 // sliceAt returns the portion of src that satisfies a read of len(dest) bytes
