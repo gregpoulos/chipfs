@@ -24,20 +24,3 @@ func TestNewRoot_AcceptsValidDir(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, root)
 }
-
-// TestMount_* tests require a mounted FUSE filesystem and are reserved for
-// integration tests that run on Linux (or macOS with macFUSE installed).
-// They live here as documentation of the expected behavior and are skipped
-// in the standard unit test run.
-
-func TestMount_VirtualDirAppearsNextToSourceFile(t *testing.T) {
-	t.Skip("integration test: requires FUSE mount (Linux or macFUSE)")
-}
-
-func TestMount_TrackFilesAreEnumerated(t *testing.T) {
-	t.Skip("integration test: requires FUSE mount (Linux or macFUSE)")
-}
-
-func TestMount_TrackFileReturnsValidWAV(t *testing.T) {
-	t.Skip("integration test: requires FUSE mount (Linux or macFUSE)")
-}

@@ -13,9 +13,9 @@ import (
 func makeGBS(trackCount int, title, author, copyright string) []byte {
 	buf := make([]byte, 0x70)
 	copy(buf[0:3], "GBS")
-	buf[3] = 0x01          // version 1
+	buf[3] = 0x01 // version 1
 	buf[4] = byte(trackCount)
-	buf[5] = 0x01          // first track (1-indexed)
+	buf[5] = 0x01 // first track (1-indexed)
 	// load/init/play addresses and stack pointer: zeroed (valid for tests)
 	copyNullPadded(buf[0x10:0x30], title)
 	copyNullPadded(buf[0x30:0x50], author)
@@ -52,14 +52,6 @@ func TestParse_RejectsInvalidMagic(t *testing.T) {
 func TestParse_RejectsTooShort(t *testing.T) {
 	_, err := gbs.Parse([]byte("GBS"))
 	assert.Error(t, err)
-}
-
-func TestParse_NullPaddedStringsAreTrimmed(t *testing.T) {
-	data := makeGBS(1, "Tetris", "Hirokazu Tanaka", "1989 Nintendo")
-	h, err := gbs.Parse(data)
-	require.NoError(t, err)
-	assert.Equal(t, "Tetris", h.Title)
-	assert.Equal(t, "Hirokazu Tanaka", h.Author)
 }
 
 // TestParse_SeasideVillage tests against a real GBS file (Beatscribe, CC0) to

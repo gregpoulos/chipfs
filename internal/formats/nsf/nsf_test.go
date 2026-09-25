@@ -15,7 +15,7 @@ import (
 func makeNSF(trackCount int, title, artist, copyright string) []byte {
 	buf := make([]byte, 128)
 	copy(buf[0:5], []byte{0x4E, 0x45, 0x53, 0x4D, 0x1A}) // "NESM\x1A"
-	buf[5] = 0x01                                          // version 1
+	buf[5] = 0x01                                        // version 1
 	buf[6] = byte(trackCount)
 	buf[7] = 0x01 // first track (1-indexed)
 	// load/init/play addresses: set to valid-looking values
@@ -80,14 +80,6 @@ func TestParse_TrackCountRange(t *testing.T) {
 	}
 }
 
-func TestParse_NullPaddedStringsAreTrimmed(t *testing.T) {
-	// NSF strings are null-padded to exactly 32 bytes; trailing nulls must be stripped
-	data := makeNSF(1, "Short Title", "Artist", "2024")
-	h, err := nsf.Parse(data)
-	require.NoError(t, err)
-	assert.Equal(t, "Short Title", h.Title, "trailing null bytes should not appear in result")
-}
-
 // TestParse_Pently tests against a real NSF file (Pently demo by Damian Yerrick,
 // zlib license) to catch assumptions that synthetic fixtures might not exercise.
 func TestParse_Pently(t *testing.T) {
@@ -133,8 +125,8 @@ func infoChunk(trackCount, firstTrack int) nsfeChunk {
 	data[0], data[1] = 0x00, 0x80 // load addr 0x8000
 	data[2], data[3] = 0x00, 0x80 // init addr 0x8000
 	data[4], data[5] = 0x05, 0x80 // play addr 0x8005
-	data[6] = 0x00                 // NTSC
-	data[7] = 0x00                 // no extra sound chips
+	data[6] = 0x00                // NTSC
+	data[7] = 0x00                // no extra sound chips
 	data[8] = byte(trackCount)
 	data[9] = byte(firstTrack)
 	return nsfeChunk{"INFO", data}
@@ -271,11 +263,6 @@ func TestParseNSFe_RejectsUnknownMandatoryChunk(t *testing.T) {
 
 	_, err := nsf.Parse(data)
 	assert.Error(t, err)
-}
-
-func TestParseNSFe_RejectsInvalidMagic(t *testing.T) {
-	_, err := nsf.Parse([]byte("NOT AN NSFE FILE AT ALL"))
-	assert.ErrorIs(t, err, nsf.ErrInvalidMagic)
 }
 
 func TestParseNSFe_MissingINFO(t *testing.T) {

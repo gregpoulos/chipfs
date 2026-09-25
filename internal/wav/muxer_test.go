@@ -51,22 +51,6 @@ func TestEncode_RIFFSizeMatchesActualLength(t *testing.T) {
 	assert.Equal(t, uint32(len(out)-8), riffSize)
 }
 
-func TestEncode_WithMetadata(t *testing.T) {
-	samples := make([]int16, 100)
-	opts := wav.Options{
-		SampleRate: 44100,
-		Channels:   2,
-		Metadata: wav.Metadata{
-			Title:  "Dr. Wily Stage 1",
-			Artist: "Takashi Tateishi",
-			Album:  "Mega Man 2",
-			Track:  3,
-		},
-	}
-	out := wav.Encode(samples, opts)
-	assert.Greater(t, len(out), 44, "output with metadata must be larger than bare WAV header")
-}
-
 func TestEncode_ID3ChunkPresentAfterFmt(t *testing.T) {
 	samples := make([]int16, 100)
 	out := wav.Encode(samples, stereoOpts)

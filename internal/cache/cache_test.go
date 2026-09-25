@@ -95,7 +95,7 @@ func TestCache_OverwriteUpdatesSize(t *testing.T) {
 	// Overwriting an entry with larger data must not leak the old bytes into
 	// the used-byte accounting.
 	c := cache.New(20)
-	c.Set("game.nsf", 0, []byte("small"))      // 5 bytes
+	c.Set("game.nsf", 0, []byte("small"))       // 5 bytes
 	c.Set("game.nsf", 0, []byte("much bigger")) // 11 bytes — replaces the 5-byte entry
 
 	data, ok := c.Get("game.nsf", 0)

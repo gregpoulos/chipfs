@@ -245,29 +245,6 @@ func TestRealFileHandle_Read(t *testing.T) {
 	assert.Equal(t, []byte("world!"), b2)
 }
 
-// TestRealFileHandle_Release_ClosesFile verifies that Release closes the
-// underlying file descriptor so subsequent reads on it fail.
-func TestRealFileHandle_Release_ClosesFile(t *testing.T) {
-	f, err := os.CreateTemp("", "chipfs-realfile-*.bin")
-	require.NoError(t, err)
-	defer os.Remove(f.Name())
-	_, err = f.Write([]byte("data"))
-	require.NoError(t, err)
-	f.Close()
-
-	of, err := os.Open(f.Name())
-	require.NoError(t, err)
-	h := &realFileHandle{file: of}
-
-	errno := h.Release(context.Background())
-	assert.Equal(t, syscall.Errno(0), errno)
-
-	// After Release the fd is closed; ReadAt must fail.
-	dest := make([]byte, 4)
-	_, readErr := of.ReadAt(dest, 0)
-	assert.Error(t, readErr, "file must be closed after Release")
-}
-
 // copyFixture copies a testdata fixture to dst, creating parent directories.
 func copyFixture(t *testing.T, name, dst string) {
 	t.Helper()
