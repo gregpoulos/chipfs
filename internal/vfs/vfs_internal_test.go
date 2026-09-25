@@ -534,3 +534,42 @@ func TestBuildTrackList_DoesNotReadUnrecognizedFiles(t *testing.T) {
 		t.Fatal("buildTrackList read a file it doesn't recognize")
 	}
 }
+
+// TestBuildTrackList_Formats pins down per-format naming, titles, and duration
+// sources: numbered files for multi-track formats, a bare title for SPC, and
+// embedded durations winning over the configured defaults.
+func TestBuildTrackList_Formats(t *testing.T) {
+	const fixtures = "../../testdata/fixtures/"
+	type want struct {
+		filename, title, artist, album string
+		playMs, fadeMs                 int
+	}
+	check := func(t *testing.T, got trackEntry, w want) {
+		t.Helper()
+		md := got.opts.Metadata
+		assert.Equal(t, w, want{got.filename, md.Title, md.Artist, md.Album, got.playMs, got.fadeMs})
+	}
+
+	nsfe := buildTrackList(fixtures+"pently-demo.nsfe", 180_000, 8_000)
+	check(t, nsfe[1], want{"02 - Isometry.wav", "Isometry", "DJ Tepples", "Pently demo", 192_000, 8_000})
+	assert.Equal(t, 2, nsfe[1].opts.Metadata.Track)
+
+	gbs := buildTrackList(fixtures+"seaside-village.gbs", 180_000, 8_000)
+	require.Len(t, gbs, 1)
+	check(t, gbs[0], want{"Track_01.wav", "Track 1", "Beatscribe", "Seaside Village", 180_000, 8_000})
+
+	spc := buildTrackList(fixtures+"ode-to-joy.spc", 180_000, 8_000)
+	require.Len(t, spc, 1)
+	check(t, spc[0], want{"Ode To Joy (G Major).wav", "Ode To Joy (G Major)", "Ludwig van Beethoven", "fixtures", 14_000, 8_000})
+
+	// An SPC without a song title is named after its (synthesized) title.
+	data, err := os.ReadFile(fixtures + "ode-to-joy.spc")
+	require.NoError(t, err)
+	copy(data[0x2E:0x4E], make([]byte, 0x20))
+	untitled := filepath.Join(t.TempDir(), "untitled.spc")
+	require.NoError(t, os.WriteFile(untitled, data, 0o644))
+	spc = buildTrackList(untitled, 180_000, 8_000)
+	require.Len(t, spc, 1)
+	assert.Equal(t, "Track 1.wav", spc[0].filename)
+	assert.Equal(t, "Track 1", spc[0].opts.Metadata.Title)
+}

@@ -363,125 +363,120 @@ type trackEntry struct {
 // totalMs returns the full rendered duration including the fade.
 func (t trackEntry) totalMs() int { return t.playMs + t.fadeMs }
 
-// chiptuneExts lists the extensions buildTrackList handles; keep in sync with its switch.
-var chiptuneExts = map[string]bool{".nsf": true, ".nsfe": true, ".gbs": true, ".spc": true}
+// chipFile is the format-independent metadata buildTrackList needs from one
+// chiptune file. Strings are raw; buildTrackList cleans them.
+type chipFile struct {
+	album, artist string
+	tracks        []chipTrack
+	// singleTrack marks formats with one track per file (SPC), whose track file
+	// is named by its title alone rather than numbered.
+	singleTrack bool
+}
+
+// chipTrack is one track's metadata. Zero durations mean the file doesn't
+// specify one, so the configured default applies.
+type chipTrack struct {
+	title          string
+	playMs, fadeMs int
+}
+
+// chipParsers maps each recognized extension to its parser. buildTrackList
+// checks it before reading, so non-chiptune files are never loaded.
+var chipParsers = map[string]func(path string, data []byte) (chipFile, error){
+	".nsf":  parseNSF,
+	".nsfe": parseNSF,
+	".gbs":  parseGBS,
+	".spc":  parseSPC,
+}
 
 // buildTrackList parses a chiptune file using the pure-Go format parsers and
 // returns its track list. Returns nil if the file is not a recognised format
 // or cannot be parsed. libgme is not called here; it is reserved for rendering
 // in renderTrack, keeping mount-time scanning CGO-free.
-//
-// defaultPlayMs and defaultFadeMs are used as the clampMs fallback for tracks
-// that have no embedded duration or fade metadata.
 func buildTrackList(path string, defaultPlayMs, defaultFadeMs int) []trackEntry {
-	ext := strings.ToLower(filepath.Ext(path))
-	if !chiptuneExts[ext] {
-		return nil // don't read every video or archive in the tree
+	parse := chipParsers[strings.ToLower(filepath.Ext(path))]
+	if parse == nil {
+		return nil
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil
 	}
+	cf, err := parse(path, data)
+	if err != nil {
+		log.Printf("vfs: skipping %q: %v", path, err)
+		return nil
+	}
 
-	switch ext {
-	case ".nsf", ".nsfe":
-		h, err := nsfFmt.Parse(data)
-		if err != nil {
-			log.Printf("vfs: skipping %q: %v", path, err)
-			return nil
+	entries := make([]trackEntry, 0, len(cf.tracks))
+	for i, t := range cf.tracks {
+		title := cleanTag(t.title)
+		untitled := title == ""
+		if untitled {
+			title = fmt.Sprintf("Track %d", i+1)
 		}
-		entries := make([]trackEntry, 0, h.TrackCount)
-		for i := 0; i < h.TrackCount; i++ {
-			var title string
-			var playMs, fadeMs int
-			if i < len(h.Tracks) {
-				title = cleanTag(h.Tracks[i].Title)
-				playMs = h.Tracks[i].DurationMs
-				fadeMs = h.Tracks[i].FadeMs
-			}
-			var filename string
-			if title != "" {
-				filename = fmt.Sprintf("%02d - %s.wav", i+1, sanitizeFilename(title))
-			} else {
-				filename = fmt.Sprintf("Track_%02d.wav", i+1)
-				title = fmt.Sprintf("Track %d", i+1)
-			}
-			entries = append(entries, trackEntry{
-				filename: filename,
-				trackIdx: i,
-				playMs:   clampMs(playMs, defaultPlayMs, maxPlayMs),
-				fadeMs:   clampMs(fadeMs, defaultFadeMs, maxFadeMs),
-				opts: wav.Options{
-					SampleRate: defaultSampleRate,
-					Channels:   2,
-					Metadata: wav.Metadata{
-						Title:  title,
-						Artist: cleanTag(h.Artist),
-						Album:  cleanTag(h.Title),
-						Track:  i + 1,
-					},
-				},
-			})
+		var filename string
+		switch {
+		case cf.singleTrack:
+			filename = sanitizeFilename(title) + ".wav"
+		case untitled:
+			filename = fmt.Sprintf("Track_%02d.wav", i+1)
+		default:
+			filename = fmt.Sprintf("%02d - %s.wav", i+1, sanitizeFilename(title))
 		}
-		return entries
-
-	case ".gbs":
-		h, err := gbsFmt.Parse(data)
-		if err != nil {
-			log.Printf("vfs: skipping %q: %v", path, err)
-			return nil
-		}
-		entries := make([]trackEntry, 0, h.TrackCount)
-		for i := 0; i < h.TrackCount; i++ {
-			entries = append(entries, trackEntry{
-				filename: fmt.Sprintf("Track_%02d.wav", i+1),
-				trackIdx: i,
-				playMs:   clampMs(0, defaultPlayMs, maxPlayMs),
-				fadeMs:   clampMs(0, defaultFadeMs, maxFadeMs),
-				opts: wav.Options{
-					SampleRate: defaultSampleRate,
-					Channels:   2,
-					Metadata: wav.Metadata{
-						Title:  fmt.Sprintf("Track %d", i+1),
-						Artist: cleanTag(h.Author),
-						Album:  cleanTag(h.Title),
-						Track:  i + 1,
-					},
-				},
-			})
-		}
-		return entries
-
-	case ".spc":
-		h, err := spcFmt.Parse(data)
-		if err != nil {
-			log.Printf("vfs: skipping %q: %v", path, err)
-			return nil
-		}
-		title := cleanTag(h.SongTitle)
-		if title == "" {
-			title = "Track 1"
-		}
-		return []trackEntry{{
-			filename: sanitizeFilename(title) + ".wav",
-			trackIdx: 0,
-			playMs:   clampMs(h.PlayDurationMs, defaultPlayMs, maxPlayMs),
-			fadeMs:   clampMs(h.FadeDurationMs, defaultFadeMs, maxFadeMs),
+		entries = append(entries, trackEntry{
+			filename: filename,
+			trackIdx: i,
+			playMs:   clampMs(t.playMs, defaultPlayMs, maxPlayMs),
+			fadeMs:   clampMs(t.fadeMs, defaultFadeMs, maxFadeMs),
 			opts: wav.Options{
 				SampleRate: defaultSampleRate,
 				Channels:   2,
 				Metadata: wav.Metadata{
 					Title:  title,
-					Artist: cleanTag(h.Artist),
-					Album:  spcAlbum(path),
-					Track:  1,
+					Artist: cleanTag(cf.artist),
+					Album:  cleanTag(cf.album),
+					Track:  i + 1,
 				},
 			},
-		}}
-
-	default:
-		return nil
+		})
 	}
+	return entries
+}
+
+func parseNSF(_ string, data []byte) (chipFile, error) {
+	h, err := nsfFmt.Parse(data)
+	if err != nil {
+		return chipFile{}, err
+	}
+	cf := chipFile{album: h.Title, artist: h.Artist, tracks: make([]chipTrack, h.TrackCount)}
+	for i := range cf.tracks {
+		if i < len(h.Tracks) { // per-track metadata exists only in NSFe
+			cf.tracks[i] = chipTrack{h.Tracks[i].Title, h.Tracks[i].DurationMs, h.Tracks[i].FadeMs}
+		}
+	}
+	return cf, nil
+}
+
+func parseGBS(_ string, data []byte) (chipFile, error) {
+	h, err := gbsFmt.Parse(data)
+	if err != nil {
+		return chipFile{}, err
+	}
+	return chipFile{album: h.Title, artist: h.Author, tracks: make([]chipTrack, h.TrackCount)}, nil
+}
+
+func parseSPC(path string, data []byte) (chipFile, error) {
+	h, err := spcFmt.Parse(data)
+	if err != nil {
+		return chipFile{}, err
+	}
+	return chipFile{
+		album:       spcAlbum(path),
+		artist:      h.Artist,
+		tracks:      []chipTrack{{h.SongTitle, h.PlayDurationMs, h.FadeDurationMs}},
+		singleTrack: true,
+	}, nil
 }
 
 // spcAlbum returns the album name for an SPC file: its parent folder's name.
