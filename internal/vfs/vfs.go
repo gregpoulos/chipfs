@@ -727,6 +727,47 @@ func (f *TrackFile) renderTrack() ([]byte, error) {
 	return wav.Encode(fitSamples(allSamples, expectedSamples), f.opts), nil
 }
 
+// RenderedTrack is one track rendered exactly as the mount serves it.
+type RenderedTrack struct {
+	Filename       string // name inside the track's virtual folder
+	TrackCount     int
+	PlayMs, FadeMs int
+	Metadata       wav.Metadata
+	WAV            []byte
+}
+
+// RenderTrack renders track trackIdx (0-indexed) of the chiptune at path the
+// same way the mount does, for the cmd/render dev tool. Non-zero playMs and
+// fadeMs override the track's own durations. One difference: SPC album
+// artist is computed per folder at mount time and is not set here.
+func RenderTrack(path string, trackIdx, playMs, fadeMs int, opts Options) (RenderedTrack, error) {
+	opts.applyDefaults()
+	tracks := buildTrackList(path, opts.DefaultPlayMs, opts.DefaultFadeMs)
+	if tracks == nil {
+		return RenderedTrack{}, fmt.Errorf("%s: not a recognized chiptune file", path)
+	}
+	if trackIdx < 0 || trackIdx >= len(tracks) {
+		return RenderedTrack{}, fmt.Errorf("track %d out of range (file has %d tracks, use 0–%d)",
+			trackIdx, len(tracks), len(tracks)-1)
+	}
+	t := tracks[trackIdx]
+	t.playMs = clampMs(playMs, t.playMs, maxPlayMs)
+	t.fadeMs = clampMs(fadeMs, t.fadeMs, maxFadeMs)
+
+	data, err := newTrackFile(path, time.Time{}, t, nil, nil).renderTrack()
+	if err != nil {
+		return RenderedTrack{}, err
+	}
+	return RenderedTrack{
+		Filename:   t.filename,
+		TrackCount: len(tracks),
+		PlayMs:     t.playMs,
+		FadeMs:     t.fadeMs,
+		Metadata:   t.opts.Metadata,
+		WAV:        data,
+	}, nil
+}
+
 // fitSamples forces samples to exactly n values so the rendered WAV size
 // matches EstimatedSize, which getattr has already reported to the client.
 // The render loop reads in 4096-sample chunks and may overshoot the fade end

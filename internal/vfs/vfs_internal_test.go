@@ -573,3 +573,27 @@ func TestBuildTrackList_Formats(t *testing.T) {
 	assert.Equal(t, "Track 1.wav", spc[0].filename)
 	assert.Equal(t, "Track 1", spc[0].opts.Metadata.Title)
 }
+
+// TestRenderTrack verifies the dev-tool entry point renders exactly what the
+// mount would serve, with optional duration overrides.
+func TestRenderTrack(t *testing.T) {
+	const path = "../../testdata/fixtures/pently.nsf"
+
+	got, err := RenderTrack(path, 1, 1_000, 500, Options{})
+	require.NoError(t, err)
+	assert.Equal(t, "Track_02.wav", got.Filename)
+	assert.Equal(t, 24, got.TrackCount)
+	assert.Equal(t, "Pently demo", got.Metadata.Album)
+	assert.Equal(t, wav.EstimatedSize(1_500, wav.Options{SampleRate: 44100, Channels: 2, Metadata: got.Metadata}), int64(len(got.WAV)))
+
+	// No overrides: the mount's defaults apply.
+	got, err = RenderTrack(path, 0, 0, 0, Options{DefaultPlayMs: 2_000, DefaultFadeMs: 1_000})
+	require.NoError(t, err)
+	assert.Equal(t, 2_000, got.PlayMs)
+	assert.Equal(t, 1_000, got.FadeMs)
+
+	_, err = RenderTrack(path, 24, 0, 0, Options{})
+	assert.Error(t, err, "track index out of range")
+	_, err = RenderTrack("/etc/hosts", 0, 0, 0, Options{})
+	assert.Error(t, err, "not a chiptune")
+}

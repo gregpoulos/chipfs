@@ -169,28 +169,11 @@ the helper's socket handshake with go-fuse.
 
 ### `cmd/render`
 
-Developer utility for manual integration testing. Renders a single track from a
-chiptune file to a WAV file on disk, exercising the full pipeline
-(format parser → libgme → WAV muxer) without requiring a FUSE mount.
-
-```
-go run ./cmd/render -file <path> -track <n> [-out <path>] [-duration <ms>] [-fade <ms>]
-```
-
-Flags:
-- `-file` (required) — path to an NSF, NSFe, GBS, or SPC file
-- `-track` — 0-indexed track number (default: 0)
-- `-out` — output WAV path (default: `<stem>_track<N>.wav` in the current directory)
-- `-duration` — override play duration in milliseconds (default: from file metadata, or 180000)
-- `-fade` — fade-out length in milliseconds (default: 8000)
-
-On success it prints a summary line:
-
-```
-Rendered: Pently demo — Track 1 — track 1/24 — 180000ms → /tmp/pently_track01.wav (30.2 MB)
-```
-
-This is a development tool only and is not part of the production filesystem binary.
+Developer utility: renders one track to a WAV file on disk via
+`vfs.RenderTrack`, which uses the mount's own track list and render path, so
+the output matches what the mount serves (except SPC album artist, which is
+computed per folder at mount time). `-duration`/`-fade` override the track's
+durations; see `go run ./cmd/render -h`.
 
 ---
 
