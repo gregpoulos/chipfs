@@ -546,3 +546,16 @@ func TestRenderTrack(t *testing.T) {
 	_, err = RenderTrack("/etc/hosts", 0, 0, 0, Options{})
 	assert.Error(t, err, "not a chiptune")
 }
+
+// TestRealFile_Open_ReportsUnderlyingError verifies an unreadable source file
+// surfaces as EACCES, not a misleading ENOENT.
+func TestRealFile_Open_ReportsUnderlyingError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "locked.nsf")
+	require.NoError(t, os.WriteFile(path, []byte("x"), 0o000))
+	if f, err := os.Open(path); err == nil {
+		f.Close()
+		t.Skip("running as root: permissions are not enforced")
+	}
+	_, _, errno := (&RealFile{path: path}).Open(context.Background(), 0)
+	assert.Equal(t, syscall.EACCES, errno)
+}

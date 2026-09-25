@@ -285,7 +285,7 @@ var _ fs.NodeGetattrer = (*RealFile)(nil)
 func (f *RealFile) Open(_ context.Context, _ uint32) (fs.FileHandle, uint32, syscall.Errno) {
 	file, err := os.Open(f.path)
 	if err != nil {
-		return nil, 0, syscall.ENOENT
+		return nil, 0, fs.ToErrno(err)
 	}
 	return &realFileHandle{file: file}, gofuse.FOPEN_KEEP_CACHE, 0
 }
@@ -293,7 +293,7 @@ func (f *RealFile) Open(_ context.Context, _ uint32) (fs.FileHandle, uint32, sys
 func (f *RealFile) Getattr(_ context.Context, _ fs.FileHandle, out *gofuse.AttrOut) syscall.Errno {
 	st, err := os.Stat(f.path)
 	if err != nil {
-		return syscall.ENOENT
+		return fs.ToErrno(err)
 	}
 	out.Mode = syscall.S_IFREG | 0444
 	out.Size = uint64(st.Size())
